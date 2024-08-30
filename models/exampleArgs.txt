@@ -1,0 +1,174 @@
+    vocab_size=tokenizer.get_vocab_size(),  # Set vocab size including special tokens
+    max_position_embeddings=1024,  # Adjust based on your needs
+    encoder_layers=6,
+    decoder_layers=6,
+    encoder_attention_heads=12,
+    decoder_attention_heads=12,
+    encoder_ffn_dim=3072,
+    decoder_ffn_dim=3072,
+    hidden_size=1152,  # Ensure this is divisible by the number of attention heads
+    pad_token_id=tokenizer.token_to_id("<pad>"),
+    bos_token_id=tokenizer.token_to_id("<s>"),
+    eos_token_id=tokenizer.token_to_id("</s>"),
+    mask_token_id=tokenizer.token_to_id("<mask>")  # Ensure this matches the ID used during pre-training
+
+
+num_epochs = 20  # Adjust based on your needs
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+https://huggingface.co/docs/transformers/en/model_doc/bart
+
+LEARNING_RATE = 1e-5
+
+MAX_POSITION_EMBEDDINGS: 1024
+ENCODER_LAYERS = 6
+DECODER_LAYERS = 6
+NUM_ENCODER_ATTENTION_HEADS: 12
+NUM_DECODER_ATTENTION_HEADS: 12
+ENCODER_FFN_DIM = 3072
+DECODER_FFN_DIM = 3072
+HIDDEN_SIZE = 1152
+
+
+
+TRASH configuration_bart.py
+    def __init__(
+        self,
+        vocab_size=50265,
+        max_position_embeddings=1024,
+        encoder_layers=12,
+        encoder_ffn_dim=4096,
+        encoder_attention_heads=16,
+        decoder_layers=12,
+        decoder_ffn_dim=4096,
+        decoder_attention_heads=16,
+        encoder_layerdrop=0.0,
+        decoder_layerdrop=0.0,
+        activation_function="gelu",
+        d_model=1024,
+        dropout=0.1,
+        attention_dropout=0.0,
+        activation_dropout=0.0,
+        init_std=0.02,
+        classifier_dropout=0.0,
+        scale_embedding=False,
+        use_cache=True,
+        num_labels=3,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
+        is_encoder_decoder=True,
+        decoder_start_token_id=2,
+        forced_eos_token_id=2,
+        **kwargs,
+# https://huggingface.co/docs/transformers/en/model_doc/bart#transformers.BartConfig defaults
+
+
+## TRASH CHATGPT generated code...
+import torch
+from torch.utils.data.dataset import Dataset
+
+import os
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["WANDB_DISABLED"] = "true"
+
+
+class CustomDataset(Dataset):
+    def __init__(self, df, tokenizer, MAX_LEN):
+        self.input_ids = []
+        self.attention_masks = []
+
+        for example in df.values:
+            encoded_dict = tokenizer.encode_plus(
+                example[0],                      # Input text
+                example[1],                      # Target text
+                max_length=MAX_LEN,
+                padding='max_length',
+                truncation=True,
+                return_tensors='pt'
+            )
+            self.input_ids.append(encoded_dict['input_ids'])
+            self.attention_masks.append(encoded_dict['attention_mask'])
+
+    def __len__(self):
+        return len(self.input_ids)
+
+    def __getitem__(self, idx):
+        return {
+            'input_ids': self.input_ids[idx].squeeze(),
+            'attention_mask': self.attention_masks[idx].squeeze()
+        }
+
+
+import pandas as pd
+from sklearn.model_selection import train_test_split
+
+from transformers import BartConfig, BartForConditionalGeneration, BartTokenizerFast
+from transformers import DataCollatorForSeq2Seq, Trainer, TrainingArguments
+
+import math
+
+
+def train_and_save_bart_model(hyperparameters_dict, data_path="./data/dataset.csv", tokenizer_path="./data/barttokenizer/", save_to="./saved_model/"):
+    TRAIN_BATCH_SIZE = hyperparameters_dict["TRAIN_BATCH_SIZE"]
+    VALID_BATCH_SIZE = hyperparameters_dict["VALID_BATCH_SIZE"]
+    TRAIN_EPOCHS = hyperparameters_dict["TRAIN_EPOCHS"]
+    LEARNING_RATE = hyperparameters_dict["LEARNING_RATE"]
+    WEIGHT_DECAY = hyperparameters_dict["WEIGHT_DECAY"]
+    MAX_LEN = hyperparameters_dict["MAX_LEN"]
+
+    config = BartConfig(
+        vocab_size=hyperparameters_dict["VOCAB_SIZE"],
+        max_position_embeddings=hyperparameters_dict["MAX_POSITION_EMBEDDINGS"],
+        num_attention_heads=hyperparameters_dict["NUM_ATTENTION_HEADS"],
+        encoder_layers=hyperparameters_dict["ENCODER_LAYERS"],
+        decoder_layers=hyperparameters_dict["DECODER_LAYERS"],
+        d_model=hyperparameters_dict["HIDDEN_SIZE"],
+        type_vocab_size=hyperparameters_dict["TYPE_VOCAB_SIZE"]
+    )
+
+    def _model_init():
+        return BartForConditionalGeneration(config=config)
+
+    df = pd.read_csv(data_path, header=None)
+
+    tokenizer = BartTokenizerFast.from_pretrained(tokenizer_path)
+
+    train_df, eval_df = train_test_split(df, test_size=0.2, random_state=42)
+    train_dataset = CustomDataset(train_df, tokenizer, MAX_LEN)
+    eval_dataset = CustomDataset(eval_df, tokenizer, MAX_LEN)
+
+    data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=_model_init(), padding=True)
+
+    training_args = TrainingArguments(
+        output_dir=save_to,
+        overwrite_output_dir=True,
+        evaluation_strategy="epoch",
+        save_strategy="epoch",
+        num_train_epochs=TRAIN_EPOCHS,
+        learning_rate=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+        per_device_train_batch_size=TRAIN_BATCH_SIZE,
+        per_device_eval_batch_size=VALID_BATCH_SIZE,
+        save_total_limit=1,
+        disable_tqdm=True,
+        # fp16=True
+    )
+
+    trainer = Trainer(
+        model_init=_model_init,
+        args=training_args,
+        data_collator=data_collator,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+    )
+
+    print("build trainer with on device:", training_args.device, "with n gpus:", training_args.n_gpu)
+    trainer.train()
+    print("training finished.")
+
+    eval_results = trainer.evaluate()
+    print(f">>> Perplexity: {math.exp(eval_results['eval_loss']):.2f}")
+
+    trainer.save_model(save_to)
