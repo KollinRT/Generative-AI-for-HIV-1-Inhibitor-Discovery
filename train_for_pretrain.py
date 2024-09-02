@@ -183,14 +183,39 @@ with open(args.hyperparameters_path) as file:
 print("Loaded hyperparameters:", hyperparameters)  # Debug print to check the loaded hyperparameters
 
 # Access the 'BART' key in the hyperparameters dictionary
-bart_hyperparameters = hyperparameters.get('BART', {})
+# TODO: Modify this so then I can pass in multiple key's to create various models... The key name will be the model name directory folder name.
+# Edit further to allow for multiple models to be trained in job submission. This would ideally set up and redefine the vocabulary for each model.
+# This would be done by passing in a list of keys to the hyperparameters dictionary but would probably need to include additional parameters such as
+# molecular weight, WHAT ELSE DID I UTILIZE IN MY SQL SCRIPT? I should be able to target particularly pertinent subsets of ChEMBL or other datasets...
+
+bart_hyperparameters = hyperparameters.get('BART', {}) # This would have some model specific hyperparameters and probably be part of a for loop to iterate over the keys representing each model in the hyperparameters dictionary.
 print("Starting pretraining with HIDDEN_SIZE parameter set.")
 WIP_BartSettings.train_and_save_BART(
     hyperparameters_dict=bart_hyperparameters,
     selfies_path=args.prepared_data_path,
     bpe_path=args.bpe_path,
-    save_to="./saved_models/BART_saved_model/"
+    save_to="./saved_models/BART_saved_model/" # This would utilize an f-string for the "BART_saved_model" so then I can get multiple saved models...
 )
 print("Finished pretraining with HIDDEN_SIZE parameter set.\n---------------\n")
 
 
+"""
+TODO: Figure out if I only need to pretrain once or if I need to do it for each model... I think I only need to do it once but I need to check that. 
+Then I can fine-tune them all from there on subsets of data?
+
+I would then have to parse if the `save_to` is pre-train or fine-tune and then adjust the training accordingly so it would go pre-train then filter and fine-tune....
+this would allow me to do a model then the next one... then I can come back later and do molecular generation tasks...
+
+
+TODO: Also need to work to add the fine tuning on that particular dataset....
+Ideally the pretraining would include all the molecules but then the fine tuning would be done on a subset of the data.
+This is where the MW and other factors would play into the model training phase. I could then 
+
+
+
+TODO: This would involve adjusting the python script that does the SQL load in to include the molecular weight (and other factors) that I can feed into the sql query 
+to save that subset then put into the fine-tune script....
+
+
+"""
+ 
