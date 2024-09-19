@@ -133,6 +133,9 @@
 
 ### end
 
+# add some checks
+import os
+
 import argparse
 import pandas as pd
 import yaml
@@ -146,6 +149,41 @@ parser.add_argument("--prepared_data_path", required=True, metavar="/path/to/dat
 parser.add_argument("--bpe_path", required=True, metavar="/path/to/bpetokenizer/", default="", help="Path of the BPE tokenizer. If it does not exist, it will be created at the given path.")
 parser.add_argument("--hyperparameters_path", required=True, metavar="/path/to/hyperparameters/", help="Path of the hyperparameters that will be used for pre-training. Hyperparameters should be stored in a yaml file.")
 args = parser.parse_args()
+
+# BART_saved_model
+# Dir for pre-trained model is:
+# "./saved_models/BART_saved_model/"
+
+# if os.path.exists("./saved_models/BART_saved_model/"):
+#     print("Model directory exists.")
+# else:
+#     os.makedirs("./saved_models/BART_saved_model/")
+#     print("Created model directory.")
+
+# if not os.path.exists(args.prepared_data_path):
+#     os.makedirs(args.prepared_data_path)
+#     print(f"Created directory: {args.prepared_data_path}")
+    
+# elif not os.path.isdir(args.prepared_data_path):
+#     raise NotADirectoryError(f"{args.prepared_data_path} is not a directory.")
+
+
+# TODO: Make sure that we still train the pre-train model if it doesn't exist.....
+# if not exist then we create the original pre-train else we skip it and go to fine-tuning....
+pretrain_check = os.listdir("./saved_models/BART_pretrained/") 
+if len(pretrain_check) == 0:
+    print("No pre-trained model found. Starting pre-training.")
+else:
+    print("Pre-trained model found. Skipping pre-training.")
+    
+# NEED To integrate the above with the below...
+# if not os.path.exists(args.prepared_data_path):
+#     os.makedirs(args.prepared_data_path)
+#     print(f"Created directory: {args.prepared_data_path}")
+# elif not os.path.isdir(args.prepared_data_path):
+#     raise NotADirectoryError(f"{args.prepared_data_path} is not a directory.")
+
+
 
 try:
     df = pd.read_csv(args.selfies_dataset)
@@ -177,10 +215,23 @@ if not isfile(args.bpe_path + "/merges.txt"):
     prepare_dataset.bpe_tokenizer(path=args.prepared_data_path, save_to=args.bpe_path)
 print("BPE Tokenizer is ready.")
 
+# TODO: NEW I think this is where the if check works... we check here and see if it exists?
+# We need to list a for-list with a YAML file that has multiple models in it... then we can iterate over the keys and train each model...
+# This includes not only just the pre-training but also the fine-tuning... NOT JUST BART...
+# RENAME BART to BART_pretrain as as the key....
+
+# The pretrain would be the base for each fine-tuning...
+
+
+# if model_name...
+
+# This hyperparameters path will contain lots of things and all the models... so this isn't part of the if statement...
 with open(args.hyperparameters_path) as file:
     hyperparameters = yaml.safe_load(file)
 
 print("Loaded hyperparameters:", hyperparameters)  # Debug print to check the loaded hyperparameters
+
+
 
 # Access the 'BART' key in the hyperparameters dictionary
 # TODO: Modify this so then I can pass in multiple key's to create various models... The key name will be the model name directory folder name.
@@ -188,13 +239,14 @@ print("Loaded hyperparameters:", hyperparameters)  # Debug print to check the lo
 # This would be done by passing in a list of keys to the hyperparameters dictionary but would probably need to include additional parameters such as
 # molecular weight, WHAT ELSE DID I UTILIZE IN MY SQL SCRIPT? I should be able to target particularly pertinent subsets of ChEMBL or other datasets...
 
-bart_hyperparameters = hyperparameters.get('BART', {}) # This would have some model specific hyperparameters and probably be part of a for loop to iterate over the keys representing each model in the hyperparameters dictionary.
+# for key in hyperparameters.keys():
+bart_hyperparameters = hyperparameters.get("BART", {}) # This would have some model specific hyperparameters and probably be part of a for loop to iterate over the keys representing each model in the hyperparameters dictionary.
 print("Starting pretraining with HIDDEN_SIZE parameter set.")
 WIP_BartSettings.train_and_save_BART(
     hyperparameters_dict=bart_hyperparameters,
     selfies_path=args.prepared_data_path,
     bpe_path=args.bpe_path,
-    save_to="./saved_models/BART_saved_model/" # This would utilize an f-string for the "BART_saved_model" so then I can get multiple saved models...
+    save_to=f"./saved_models/BART_saved_model/" # This would utilize an f-string for the "BART_saved_model" so then I can get multiple saved models...
 )
 print("Finished pretraining with HIDDEN_SIZE parameter set.\n---------------\n")
 
@@ -215,7 +267,5 @@ This is where the MW and other factors would play into the model training phase.
 
 TODO: This would involve adjusting the python script that does the SQL load in to include the molecular weight (and other factors) that I can feed into the sql query 
 to save that subset then put into the fine-tune script....
-
-
 """
  
