@@ -211,7 +211,7 @@ print("SELFIES .txt is ready for tokenization.")
 print("Creating BPE tokenizer.")
 if not isfile(args.bpe_path + "/merges.txt"):
     import prepare_dataset
-
+    # TODO: This makes the bpe_tokenizer... but I do think in the prior file processing step. Maybe I need to separate this into this?
     prepare_dataset.bpe_tokenizer(path=args.prepared_data_path, save_to=args.bpe_path)
 print("BPE Tokenizer is ready.")
 
