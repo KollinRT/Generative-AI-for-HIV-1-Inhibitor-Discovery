@@ -105,3 +105,8 @@ BART:
 <!-- TODO: NEW Am I using BPE still? I think I am? I think I need around 50 to 500 tokens or 1000 to 10000 but probably 1000 at most? Not sure. Explore vocab sizes by querying it.... -->
 
 <!-- SOOOO, this uses a different model setup then my old portion? Or I am just using already established bpe_vocab with the arg.bpe_path... -->
+
+```bash
+python3 getDataForFinetune.py --yaml "./FinetuneSpecs.yml"
+```
+
