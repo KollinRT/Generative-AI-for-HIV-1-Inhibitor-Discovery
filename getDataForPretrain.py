@@ -16,7 +16,7 @@ from prepare_dataset import prepare_dataset_for_pretrain, get_selfies_alphabet
 import selfies as sf # TODO: Figure out the error handling for this... It is somewhere in my code...
 from prepare_dataset import bpe_tokenizer, get_selfies_only, convert_to_selfies
 
-
+import sqlite3
 
 # TODO: NEW Make some arg parser stuffs...
 import argparse
@@ -38,30 +38,63 @@ args = parser.parse_args()
 yaml_file = args.yaml
 # yaml_file = './FinetuneSpecs.yml'
 # Load the YAML file
+
 with open(yaml_file, 'r') as file:
-    data = yaml.safe_load(file)
+    data  = yaml.safe_load(file)
 
 pymysql_info=data['pymysql_info']
 
 # Function to establish connection to the database
+# def create_db_connection():
+#     connection = pymysql.connect(host=pymysql_info['host'],
+#                                  user=pymysql_info['user'],
+#                                  password=pymysql_info['password'],
+#                                  database=pymysql_info['database'],
+#                                  cursorclass=pymysql.cursors.DictCursor)
+#     return connection
+
+# Function to create a SQLite connection
 def create_db_connection():
-    connection = pymysql.connect(host=pymysql_info['host'],
-                                 user=pymysql_info['user'],
-                                 password=pymysql_info['password'],
-                                 database=pymysql_info['database'],
-                                 cursorclass=pymysql.cursors.DictCursor)
+    # Connect to the SQLite database located at './db/chembl_34.db'
+    connection = sqlite3.connect('./db/chembl_34.db')
+    # This ensures that rows are returned as dictionaries
+    connection.row_factory = sqlite3.Row
     return connection
 
-# Function to execute SQL query
+
+# # Function to execute SQL query
+# def execute_sql_query(query):
+#     connection = create_db_connection()
+#     try:
+#         with connection.cursor() as cursor:
+#             cursor.execute(query)
+#             results = cursor.fetchall()  # Fetch all results
+#             return [result['canonical_smiles'] for result in results]
+#     finally:
+#         connection.close()
+
+# # Function to execute SQL query
+# def execute_sql_query(query):
+#     connection = create_db_connection()
+#     try:
+#         with connection.cursor() as cursor:
+#             cursor.execute(query)
+#             results = cursor.fetchall()  # Fetch all results
+#             return [dict(result)['canonical_smiles'] for result in results]
+#     finally:
+#         connection.close()
+
 def execute_sql_query(query):
     connection = create_db_connection()
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(query)
-            results = cursor.fetchall()  # Fetch all results
-            return [result['canonical_smiles'] for result in results]
+        cursor = connection.cursor()  # Create the cursor directly
+        cursor.execute(query)  # Execute the query
+        results = cursor.fetchall()  # Fetch all results
+        return [dict(result)['canonical_smiles'] for result in results]  # Process and return results
     finally:
-        connection.close()
+        cursor.close()  # Close the cursor manually
+        connection.close()  # Ensure the connection is closed
+
  
 # chembl_34.compound_structures is where canonical_smiles is
 # SELECT DISTINCT cs.canonical_smiles
@@ -90,8 +123,8 @@ def query_chembl(excluded_tids):
     FROM compound_structures cs
     JOIN activities a ON cs.molregno = a.molregno
     JOIN assays ass ON a.assay_id = ass.assay_id
-    WHERE ass.tid NOT IN (191, 12456) # not HIV-1 inhibs
-    AND a.standard_type = 'IC50'; # for IC50 values
+    WHERE ass.tid NOT IN (191, 12456)
+    AND a.standard_type = 'IC50';
     """
     return execute_sql_query(query) # 954555
 # TODO: If I can get these 954555 then make them filtered or what not then the model names save
@@ -262,7 +295,7 @@ def filter_properties(properties_df, model_name, filters):
 model_hyperparams = data['molecular_properties_to_filter']
  
 # Load the initial DataFrame
-non_filter = pd.read_csv("/home/kollin/Desktop/ThesisCode/ThesisCode/vocab_smiles_data_TEST_properties.csv")
+non_filter = pd.read_csv("./vocab_smiles_data_TEST_properties.csv")
 
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -273,55 +306,98 @@ for model_name, filters in model_hyperparams.items():
     for property_name, value in filters.items():
         print(f"  {property_name}: {value}")
     
+    # # Filter properties and save the filtered DataFrames
+    # filter_properties(non_filter, model_name, filters)
+    #
+    # # Tokenize the filtered data using BPE tokenizer
+    # bpe_save_to = f"./data/bpe_filter_{model_name}/"
+    # filtered_filename = f"model_name_{model_name}.csv"
+    # # bpe_tokenizer(filtered_filename, save_to=bpe_save_to)
+    # # FIX maybe tokenize after dropping the SMILES column... and all the others besides selfies...
+    #
+    # # Load the filtered DataFrame
+    # df = pd.read_csv(filtered_filename)
+    #
+    # # For SMILES to SELFIES, start by making a new column by copying the canonical SMILES
+    # df["selfies"] = df["SMILES"]
+    #
+    # # Convert to SELFIES
+    # df.selfies = df.selfies.parallel_apply(convert_to_selfies)
+    #
+    # print(df.columns)
+    # print(df.selfies.head(100))
+    #
+    # # Remove molecules that are not converted
+    # df.drop(df[df.SMILES == df.selfies].index, inplace=True)
+    #
+    # # Drop the canonical_smiles representation
+    # df.drop(columns=["SMILES"], inplace=True)
+    # print(f"second df.columns: {df.columns}")
+    # print(f"second len(df.selfies): {len(df.selfies)}")
+    #
+    #
+    #
+    # # Drop all columns except for selfies
+    # df = df[['selfies']]
+    #
+    # # Remove the first row
+    # # df = df.iloc[1:]
+    # # TODO: Now it would be ready for the BPE tokenizer...
+    #
+    #
+    # # Save to a .csv file
+    # selfies_save_to = f"./data/filtered_selfies_{model_name}.csv"
+    # df.to_csv(selfies_save_to, index=False)
+    # df = pd.read_csv(selfies_save_to)
+    # # print(df.columns)
+    # print(df)
+    # print(f"df is {df}")
+    # # bpe_tokenizer(selfies_save_to, save_to=bpe_save_to)
+    #
+    #
+    # print(f"SELFIES data saved to {selfies_save_to}")
     # Filter properties and save the filtered DataFrames
     filter_properties(non_filter, model_name, filters)
-    
+
     # Tokenize the filtered data using BPE tokenizer
     bpe_save_to = f"./data/bpe_filter_{model_name}/"
     filtered_filename = f"model_name_{model_name}.csv"
-    bpe_tokenizer(filtered_filename, save_to=bpe_save_to)
-    # FIX maybe tokenize after dropping the SMILES column... and all the others besides selfies...
-    
+
     # Load the filtered DataFrame
     df = pd.read_csv(filtered_filename)
-    
+
     # For SMILES to SELFIES, start by making a new column by copying the canonical SMILES
     df["selfies"] = df["SMILES"]
-    
+
     # Convert to SELFIES
     df.selfies = df.selfies.parallel_apply(convert_to_selfies)
-    
+
     print(df.columns)
     print(df.selfies.head(100))
-    
+
     # Remove molecules that are not converted
     df.drop(df[df.SMILES == df.selfies].index, inplace=True)
-    
+
     # Drop the canonical_smiles representation
     df.drop(columns=["SMILES"], inplace=True)
     print(f"second df.columns: {df.columns}")
     print(f"second len(df.selfies): {len(df.selfies)}")
-    
-    
-    
+
     # Drop all columns except for selfies
     df = df[['selfies']]
 
-    # Remove the first row
-    df = df.iloc[1:]
-    # TODO: Now it would be ready for the BPE tokenizer...
+    # Save to a .txt file with only SELFIES strings, one per line
+    selfies_save_to = f"./data/filtered_selfies_{model_name}.txt"
+    df.to_csv(selfies_save_to, index=False, header=False)
 
+    # Load the SELFIES data from the file
+    df = pd.read_csv(selfies_save_to, header=None)
+    print(df)
 
-    # Save to a .csv file
-    selfies_save_to = f"./data/filtered_selfies_{model_name}.csv"
-    df.to_csv(selfies_save_to, index=False)
-    df = pd.read_csv(selfies_save_to, index=False, header=None)
+    # Use the BPE tokenizer on the filtered SELFIES data
     bpe_tokenizer(selfies_save_to, save_to=bpe_save_to)
 
-    
-    print(f"SELFIES data saved to {selfies_save_to}")
-
-
+    print(f"SELFIES data saved to {selfies_save_to} and tokenized at {bpe_save_to}")
 
 # TODO: So then I would load the properties_df just the canonical smiles and then do the vocabulary building
 # Which would be based off the key of the model... So I would have to loop through the keys of the model
