@@ -1,0 +1,46 @@
+# TODO: NEW Rename PretrainSpecs.yml... this is for filtering of the data....
+
+pymysql_info:
+    host: '127.0.0.1'
+    user: 'kollin'
+    password: '4582'
+    database: 'chembl_34'
+
+
+# So I also need to add some subkeys here each one. I want maybe multiple subkeys here
+# to be able to do multiple time filters and these subkeys would be able to be used
+# in the model names... 
+molecular_properties_to_filter:
+    model_1:
+        MW: 500
+        numC: 6
+        chain_length: 6
+        cLogP: 5
+        numRings: 3
+    model_2:
+        MW: 400
+        numC: 5
+        chain_length: 5
+        cLogP: 4
+        numRings: 2
+    model_3:
+        MW: 600
+        numC: 7
+        chain_length: 7
+        cLogP: 6
+        numRings: 4
+    # This is the Lipinski Rule of 5
+    model_lipinski:
+        MW: 500
+        numC: 8
+        chain_length: 8
+        cLogP: 7
+        numRings: 5
+    model_nada:
+        MW: 10000
+        numC: 60
+        chain_length: 60
+        cLogP: 50
+        numRings: 30
+
+        
