@@ -359,6 +359,9 @@ for model_name, filters in model_hyperparams.items():
     # Filter properties and save the filtered DataFrames
     filter_properties(non_filter, model_name, filters)
 
+    # FIX: IF WE STOP THIS RIGHT here we have the filtered CSV... but do I process into
+    # SELFIES here or do I just do it to SMILES then let train_for_pretrain do the selfies conversion...?
+
     # Tokenize the filtered data using BPE tokenizer
     bpe_save_to = f"./data/bpe_filter_{model_name}/"
     filtered_filename = f"model_name_{model_name}.csv"
@@ -380,8 +383,8 @@ for model_name, filters in model_hyperparams.items():
 
     # Drop the canonical_smiles representation
     df.drop(columns=["SMILES"], inplace=True)
-    print(f"second df.columns: {df.columns}")
-    print(f"second len(df.selfies): {len(df.selfies)}")
+    # print(f"second df.columns: {df.columns}")
+    # print(f"second len(df.selfies): {len(df.selfies)}")
 
     # Drop all columns except for selfies
     df = df[['selfies']]
@@ -440,3 +443,9 @@ for model_name, filters in model_hyperparams.items():
 
 #     df = pd.read_csv("./ChEMBL34_druglike_activity_filtered_ringsless3_under550MW.csv")
 #     bpe_tokenizer("./ChEMBL34_druglike_activity_filtered_ringsless3_under550MW.csv", save_to="./data/bpe_filter/")
+
+
+# TODO: I need to get this to end at getting the data...
+# Does it need to get into SELFIES or just SMILES...?
+# I have it well-defined in train_for_pretrain.py to convert to SELFIES...
+# 
