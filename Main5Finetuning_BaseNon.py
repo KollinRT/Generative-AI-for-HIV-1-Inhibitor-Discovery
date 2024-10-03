@@ -238,7 +238,7 @@ class SelfiesDataset(Dataset):
     def __init__(self, csv_file, tokenizer_path, mode='pretrain'):
         """Initialize the dataset, loading data from CSV, setting up tokenizer and mode."""
         self.data = pd.read_csv(csv_file)
-        print(f"CSV columns: {self.data.columns.tolist()}")  # Debugging print statement
+        # print(f"CSV columns: {self.data.columns.tolist()}")  # Debugging print statement
         self.tokenizer = Tokenizer.from_file(tokenizer_path)
         self.mode = mode  # Options are 'pretrain' or 'finetune'
 
@@ -248,6 +248,8 @@ class SelfiesDataset(Dataset):
 
     def __getitem__(self, idx):
         """Retrieve an item by index."""
+        print(f"Columns are: {self.data.columns}") # DEBUG
+
         selfies_string = self.data.iloc[idx]['selfies']  # Update this if the column name is different
         encoded = self.tokenizer.encode(selfies_string)
 

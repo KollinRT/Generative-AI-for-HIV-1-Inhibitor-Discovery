@@ -55,11 +55,15 @@ def convert_to_selfies(smiles_string, index=None):
 
 def prepare_dataset_for_pretrain(path="data/smiles.csv", save_to="data/selfies_ready.csv"):
     smiles_data = pd.read_csv(path)
+    print(f"smiles_data.columns: {smiles_data.columns}") # DEBUG
+    # print(smiles_data.data.head())
     pandarallel.initialize()
     smiles_data["selfies"] = smiles_data["canonical_smiles"].parallel_apply(convert_to_selfies)
     smiles_data.drop(smiles_data[smiles_data.selfies.isnull()].index, inplace=True)
-    smiles_data.drop(columns=["canonical_smiles"], inplace=True)
-    smiles_data.to_csv(save_to, index=False)
+    print(smiles_data.columns) # DEBUG
+    smiles_data.drop(columns=["canonical_smiles"], inplace=True) # TODO: Drop all besides selfies...
+    print(f"smiles_data.columns post-drop: {smiles_data.columns}")
+    smiles_data.to_csv(save_to, index=False) # TODO: index=False, header=False for sure...
 
 def create_selfies_file(selfies_df, save_to="./data/selfies_subset.txt", subset_size=100000, do_subset=True):
 
@@ -69,8 +73,15 @@ def create_selfies_file(selfies_df, save_to="./data/selfies_subset.txt", subset_
         selfies_subset = selfies_df.selfies[:subset_size]
     else:
         selfies_subset = selfies_df.selfies
-    selfies_subset = selfies_subset.to_frame()
+    selfies_subset = selfies_subset.to_frame() # 
     selfies_subset["selfies"].to_csv(save_to, index=False, header=False)
+    print("SELFIES_SUBSET here")
+    print(selfies_subset)
+    # TODO: ABOVE this should be where the save happens... not in prepare. this will be done after
+    # prepare_dataset_for_pretrain is called.... iirc
+    
+    
+    
 
 # def get_selfies_alphabet(read="./data.csv", path="./data/selfies_alphabet.csv"):
 #     df = pd.read_csv(read)

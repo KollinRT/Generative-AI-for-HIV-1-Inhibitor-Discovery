@@ -283,12 +283,13 @@ import pandas as pd
 import yaml
 from os.path import isfile
 import WIP_BartSettings
+from prepare_dataset import bpe_tokenizer, get_selfies_only, convert_to_selfies
 
 def load_hyperparameters(path):
     with open(path, 'r') as file:
         return yaml.safe_load(file)
 
-def prepare_data(args, key):
+def prepare_data(args, key): # TODO: Integrate key into here.... where?
     try:
         df = pd.read_csv(args.selfies_dataset)
     except FileNotFoundError:
@@ -302,11 +303,35 @@ def prepare_data(args, key):
     if not isfile(args.prepared_data_path):
         from prepare_dataset import create_selfies_file
         if args.subset_size != 0:
-            create_selfies_file(df, subset_size=args.subset_size, do_subset=True, save_to=args.prepared_data_path)
+            create_selfies_file(df, subset_size=args.subset_size, do_subset=True, save_to=args.prepared_data_path) # prepared_data_path is where the selfies by itself goes...
         else:
-            create_selfies_file(df, do_subset=False, save_to=args.prepared_data_path)
+            create_selfies_file(df, do_subset=False, save_to=args.prepared_data_path) # TODO: Need to ensure this is being done! LAST STEP!
     print("SELFIES .txt is ready for tokenization.")
 
+    print("Creating file for training!")
+    if not isfile(f"./data/trainable_selfies_{key}.csv"):
+        from prepare_dataset import prepare_dataset_for_pretrain
+    # create the read in model_name_{key}.csv file
+    # Convert to SELFIES
+    # create_selfies = pd.read_csv(f"model_name_{key}.csv")
+    # create_selfies["selfies"] = create_selfies["canonical_smiles"]
+    # create_selfies.selfies = create_selfies.selfies.parallel_apply(convert_to_selfies)
+    # df.drop(df[df.canonical_smiles == df.selfies].index, inplace=True)
+    # df.drop(columns=["canonical_smiles"], inplace=True)
+    # create_selfies_save_to = f"./data/trainable_selfies_{key}.csv"
+    # create_selfies.to_csv(create_selfies_save_to, index=False)
+        prepare_dataset_for_pretrain(f"./model_name_{key}.csv",f"./data/trainable_selfies_{key}.csv")
+    print(f"File for training is ready! (trainable_selfies_{key}.csv)")
+    
+    # TODO: Create the selfies.txt for the bpe tokenizer...
+    # But to train the model we need to have the inhibition site and IC50 values and selfies
+    # So training has the big dataset but bpe has little...
+    
+    # BPE is created for args.prepared_data_path... and saved to arg.bpe_path
+    
+    # Do I need to create two files? One for tokenizer and one for the selfies file with all columns
+    # this would be the file spat out into the model...
+    
     print("Creating BPE tokenizer.")
     if not isfile(args.bpe_path + "/merges.txt"):
         import prepare_dataset
@@ -317,7 +342,7 @@ def train_model(hyperparameters, args, key):
     print(f"Starting pretraining with {key} parameter set.")
     WIP_BartSettings.train_and_save_BART(
         hyperparameters_dict=hyperparameters[key],
-        selfies_path=args.prepared_data_path,
+        selfies_path=f"./data/trainable_selfies_{key}.csv",
         bpe_path=args.bpe_path,
         save_to=f"./saved_models/{key}_saved_model/"
     )
@@ -338,16 +363,111 @@ def main():
     
     for key in bart_hyperparameters.keys():
         # Update paths based on the current key
-        args.selfies_dataset = f"./data/filtered_selfies_{key}.txt"
+        args.smiles_dataset=f"model_name_{key}.csv"
+        print(args.smiles_dataset)
+        args.selfies_dataset = f"./data/molecule_data_{key}.csv" # This is the prepared data path...
         # args.prepared_data_path = f"./data/{key}_prepared_data.txt"
-        args.prepared_data_path = args.selfies_dataset
+        args.prepared_data_path = f"./data/prepared_selfies_{key}.txt"
         args.bpe_path = f"./data/bpe_filter_{key}/"
 
+        # NEED TO TOKENIZE without SELFIES header up top and then feed in with selfies...
+        # I ALSO Need to process to add in the inhibition site again? I think?
+        # This is the confusing part....
+        
+        # TODO: I also need to get IC50 values and inhibition_site....
+        # FIX: where is my query for that?
+        #        bs.site_name, in data_needed.sql is where the thingy is...
+        # then IC50 is also in relation?... idk
+        
         # Prepare data
-        # prepare_data(args, key)
+        prepare_data(args, key)
 
         # Train model
         train_model(bart_hyperparameters, args, key)
 
 if __name__ == "__main__":
     main()
+    
+    
+    
+"""
+from torch.utils.data import DataLoader
+from transformers import BartForConditionalGeneration, BartConfig, AdamW
+from tqdm import tqdm
+
+# Load the tokenizer and dataset
+tokenizer = Tokenizer.from_file("./data/bpe_non/bpe.json")
+fine_tune_dataset = SelfiesDataset(csv_file='./ChEMBL34_druglike_activity.csv', tokenizer_path='./data/bpe_non/bpe.json', mode='finetune')
+
+# Create DataLoader
+fine_tune_loader = DataLoader(fine_tune_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
+
+# Initialize BART model
+config = BartConfig(
+    vocab_size=tokenizer.get_vocab_size(),
+    max_position_embeddings=1024,
+    encoder_layers=6,
+    decoder_layers=6,
+    encoder_attention_heads=12,
+    decoder_attention_heads=12,
+    encoder_ffn_dim=3072,
+    decoder_ffn_dim=3072,
+    hidden_size=1152,
+    pad_token_id=tokenizer.token_to_id("<pad>"),
+    bos_token_id=tokenizer.token_to_id("<s>"),
+    eos_token_id=tokenizer.token_to_id("</s>")
+)
+model = BartForConditionalGeneration(config)
+
+# Optimizer and loss function
+optimizer = AdamW(model.parameters(), lr=0.0001)
+criterion = torch.nn.CrossEntropyLoss()
+
+# Check for CUDA
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+
+# Training loop
+model.train()
+for epoch in range(10):  # Number of epochs
+    total_loss = 0
+    for batch in tqdm(fine_tune_loader):
+        input_ids = batch['input_ids'].to(device)
+        attention_mask = batch['attention_mask'].to(device)
+        
+        # Forward pass (assuming self-supervised learning, labels = input_ids)
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+        
+        # Compute loss and optimize
+        loss = outputs.loss
+        total_loss += loss.item()
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    print(f"Epoch {epoch + 1}, Loss: {total_loss / len(fine_tune_loader)}")
+
+# Save the model
+torch.save(model.state_dict(), './selfies_BART_finetuned.pth')
+"""
+# NOTES BELOW TODO:
+"""
+I think I need to look at the model and make it a function that is configurable... 
+I do not think that transformers API will work well for this...
+sadly... Just get my old code training loop to work!
+
+I have pretrain and finetune training code, I think?
+I have the BartConfig also established in my WIP_BartSettings.py file...
+    Look into that and see if I can get that to work...!
+        Have hyperparameters also define the optimizer... and the loss function...
+            It should be in here... I need to rewrite the workflow...
+
+It is defined in `def train_and_save_BART(hyperparameters_dict, selfies_path="./data/selfies_subset.txt", bpe_path="./data/bpe/", save_to="./models/saved_model/"):`
+
+NEED to differentiate between pretrain and fine-tune... Which has IC50/inhibition_site and which does not?
+
+I think I have it in:
+Main5Finetuning.py... work through refactoring the logic to work with this setup...
+pretrain_dataset = SelfiesDataset(csv_file='./OrigFileSQL_Cleaned_SELFIES_READY.csv', tokenizer_path='./data/bpe/bpe.json', mode='finetune')
+TODO: I think this involves pushing the current code, cleaning it up, then pushing the new restructured code?
+"""
