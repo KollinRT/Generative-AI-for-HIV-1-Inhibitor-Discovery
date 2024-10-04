@@ -110,3 +110,12 @@ BART:
 python3 getDataForFinetune.py --yaml "./FinetuneSpecs.yml"
 ```
 
+This returns a `.csv` file with 
+`canonical_smiles,MW,numC,chain_length,cLogP,numRings,IC50,site_name`...
+Next we proceed with 
+
+```bash
+python3 MakeDefaultHyperparams.py. --file "./FinetuneSpecs.yml"
+```
+This will make the `combined_config.yml` file with some default hyperparameters...
+

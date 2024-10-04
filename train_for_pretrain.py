@@ -1,282 +1,3 @@
-# # # import argparse
-# # #
-# # # parser = argparse.ArgumentParser()
-# # # parser.add_argument("--smiles_dataset", required=False, metavar="/path/to/dataset/*.csv", help="Path of the SMILES dataset.")
-# # # parser.add_argument("--selfies_dataset", required=True, metavar="/path/to/dataset/*.csv", help="Path of the SEFLIES dataset.")
-# # # parser.add_argument("--subset_size", required=False, metavar="<int>", type=int, default=0, help="By default the program will use the whole data. If you want to instead use a subset of the data, set this parameter to the size of the subset.")
-# # # parser.add_argument("--prepared_data_path", required=True, metavar="/path/to/dataset/", help="Path of the .txt prepared data. If it does not exist, it will be created at the given path.")
-# # # parser.add_argument("--bpe_path", required=True, metavar="/path/to/bpetokenizer/", default="", help="Path of the BPE tokenizer. If it does not exist, it will be created at the given path.")
-# # # # parser.add_argument("--roberta_fast_tokenizer_path", required=True, metavar="/path/to/robertafasttokenizer/", help="Directory of the RobertaTokenizerFast tokenizer. RobertaFastTokenizer only depends on the BPE Tokenizer and will be created regardless of whether it exists or not.")
-# # # parser.add_argument("--hyperparameters_path", required=True, metavar="/path/to/hyperparameters/", help="Path of the hyperparameters that will be used for pre-training. Hyperparameters should be stored in a yaml file.")
-# # # args = parser.parse_args()
-# # #
-# # # import pandas as pd
-# # #
-# # # # TODO: NEED TO apply the selfies conversion to build it... this would use the prepared_data_path, if I am looking right?
-# # #
-# # # try:
-# # #     df = pd.read_csv(args.selfies_dataset)
-# # # except FileNotFoundError:
-# # #     from prepare_dataset import prepare_dataset_for_pretrain
-# # #     print("No SEFLIES dataset")
-# # #     prepare_dataset_for_pretrain(path = args.smiles_dataset, save_to=args.selfies_dataset)
-# # #     df = pd.read_csv(args.selfies_dataset)
-# # # print("We have a SELFIES set for ya!")
-# # #
-# # # print("Creating SELFIES.txt for tokenization.")
-# # # from os.path import isfile  # returns True if the file exists else False.
-# # #
-# # # if not isfile(args.prepared_data_path):
-# # #     from prepare_dataset import create_selfies_file
-# # #
-# # #     if args.subset_size != 0:
-# # #         create_selfies_file(df, subset_size=args.subset_size, do_subset=True, save_to=args.prepared_data_path)
-# # #     else:
-# # #         create_selfies_file(df, do_subset=False, save_to=args.prepared_data_path)
-# # # print("SELFIES .txt is ready for tokenization.")
-# # #
-# # # print("Creating BPE tokenizer.")
-# # # if not isfile(args.bpe_path + "/merges.txt"):
-# # #     import prepare_dataset
-# # #
-# # #     prepare_dataset.bpe_tokenizer(path=args.prepared_data_path, save_to=args.bpe_path)
-# # # print("BPE Tokenizer is ready.")
-# # # #
-# # # # print("Creating RobertaTokenizerFast.")
-# # # # if not isfile(args.roberta_fast_tokenizer_path + "/merges.txt"):
-# # # #     import roberta_tokenizer
-# # # #
-# # # #     roberta_tokenizer.save_roberta_tokenizer(path=args.bpe_path, save_to=args.roberta_fast_tokenizer_path)
-# # # # print("RobertaFastTokenizer is ready.")
-# # # #
-# # # import yaml
-# # # import WIP_BartSettings
-# # #
-# # # with open(args.hyperparameters_path) as file:
-# # #     hyperparameters = yaml.safe_load(file)
-# # #     for key in hyperparameters.keys():
-# # #         print("Starting pretraining with {} parameter set.".format(key))
-# # #         # TODO: INTEGRATE THIS MORE! Got to be able to call them to create the file...
-# # #         WIP_BartSettings.train_and_save_BART(hyperparameters_dict=hyperparameters[key],
-# # #                                                    selfies_path=args.prepared_data_path,
-# # #                                                    bpe_path=args.bpe_path,
-# # #                                                    save_to="./saved_models/" + key + "_saved_model/")
-# # #         print("Finished pretraining with {} parameter set.\n---------------\n".format(key))
-# # #
-# # # # Check to see
-# # # # def create_selfies_file(selfies_df, save_to="./data/selfies_subset.txt", subset_size=100000, do_subset=True):
-# # # #     selfies_df.sample(frac=1).reset_index(drop=True)  # shuffling
-# # # #
-# # # #     if do_subset:
-# # # #         selfies_subset = selfies_df.selfies[:subset_size]
-# # # #     else:
-# # # #         selfies_subset = selfies_df.selfies
-# # # #     selfies_subset = selfies_subset.to_frame()
-# # # #     selfies_subset["selfies"].to_csv(save_to, index=False, header=False)
-# # # #
-# # # # # create
-# #
-# # import argparse
-# # import pandas as pd
-# # import yaml
-# # import WIP_BartSettings
-# #
-# # parser = argparse.ArgumentParser()
-# # parser.add_argument("--smiles_dataset", required=False, metavar="/path/to/dataset/*.csv", help="Path of the SMILES dataset.")
-# # parser.add_argument("--selfies_dataset", required=True, metavar="/path/to/dataset/*.csv", help="Path of the SEFLIES dataset.")
-# # parser.add_argument("--subset_size", required=False, metavar="<int>", type=int, default=0, help="By default the program will use the whole data. If you want to instead use a subset of the data, set this parameter to the size of the subset.")
-# # parser.add_argument("--prepared_data_path", required=True, metavar="/path/to/dataset/", help="Path of the .txt prepared data. If it does not exist, it will be created at the given path.")
-# # parser.add_argument("--bpe_path", required=True, metavar="/path/to/bpetokenizer/", default="", help="Path of the BPE tokenizer. If it does not exist, it will be created at the given path.")
-# # parser.add_argument("--hyperparameters_path", required=True, metavar="/path/to/hyperparameters/", help="Path of the hyperparameters that will be used for pre-training. Hyperparameters should be stored in a yaml file.")
-# # args = parser.parse_args()
-# #
-# # try:
-# #     df = pd.read_csv(args.selfies_dataset)
-# # except FileNotFoundError:
-# #     from prepare_dataset import prepare_dataset_for_pretrain
-# #     print("No SEFLIES dataset")
-# #     prepare_dataset_for_pretrain(path = args.smiles_dataset, save_to=args.selfies_dataset)
-# #     df = pd.read_csv(args.selfies_dataset)
-# # print("We have a SELFIES set for ya!")
-# #
-# # print("Creating SELFIES.txt for tokenization.")
-# # from os.path import isfile  # returns True if the file exists else False.
-# #
-# # if not isfile(args.prepared_data_path):
-# #     from prepare_dataset import create_selfies_file
-# #
-# #     if args.subset_size != 0:
-# #         create_selfies_file(df, subset_size=args.subset_size, do_subset=True, save_to=args.prepared_data_path)
-# #     else:
-# #         create_selfies_file(df, do_subset=False, save_to=args.prepared_data_path)
-# # print("SELFIES .txt is ready for tokenization.")
-# #
-# # print("Creating BPE tokenizer.")
-# # if not isfile(args.bpe_path + "/merges.txt"):
-# #     import prepare_dataset
-# #
-# #     prepare_dataset.bpe_tokenizer(path=args.prepared_data_path, save_to=args.bpe_path)
-# # print("BPE Tokenizer is ready.")
-# #
-# # with open(args.hyperparameters_path) as file:
-# #     hyperparameters = yaml.safe_load(file)
-# #
-# # print("Starting pretraining with HIDDEN_SIZE parameter set.")
-# # WIP_BartSettings.train_and_save_BART(
-# #     hyperparameters_dict=hyperparameters,
-# #     selfies_path=args.prepared_data_path,
-# #     bpe_path=args.bpe_path,
-# #     save_to="./saved_models/BART_saved_model/"
-# # )
-# # print("Finished pretraining with HIDDEN_SIZE parameter set.\n---------------\n")
-
-
-# # START: train_for_pretrain.py
-# ### end
-
-# # add some checks
-# import os
-
-# import argparse
-# import pandas as pd
-# import yaml
-# import WIP_BartSettings
-
-# parser = argparse.ArgumentParser()
-# parser.add_argument("--smiles_dataset", required=False, metavar="/path/to/dataset/*.csv", help="Path of the SMILES dataset.")
-# parser.add_argument("--selfies_dataset", required=True, metavar="/path/to/dataset/*.csv", help="Path of the SEFLIES dataset.")
-# parser.add_argument("--subset_size", required=False, metavar="<int>", type=int, default=0, help="By default the program will use the whole data. If you want to instead use a subset of the data, set this parameter to the size of the subset.")
-# parser.add_argument("--prepared_data_path", required=True, metavar="/path/to/dataset/", help="Path of the .txt prepared data. If it does not exist, it will be created at the given path.")
-# parser.add_argument("--bpe_path", required=True, metavar="/path/to/bpetokenizer/", default="", help="Path of the BPE tokenizer. If it does not exist, it will be created at the given path.")
-# parser.add_argument("--hyperparameters_path", required=True, metavar="/path/to/hyperparameters/", help="Path of the hyperparameters that will be used for pre-training. Hyperparameters should be stored in a yaml file.")
-# args = parser.parse_args()
-
-# # TODO: Modify bpe_path and prepared_data_path to be based off of the yaml key
-# # This should be done by iterating over the keys in the hyperparameters dictionary and then setting the bpe_path and prepared_data_path to the key value.
-# # This should be relatively simple! Then I can start training NNs on different datasets and hyperparameters.
-# # WOOT WOOT...
-
-# # BART_saved_model
-# # Dir for pre-trained model is:
-# # "./saved_models/BART_saved_model/"
-
-# # if os.path.exists("./saved_models/BART_saved_model/"):
-# #     print("Model directory exists.")
-# # else:
-# #     os.makedirs("./saved_models/BART_saved_model/")
-# #     print("Created model directory.")
-
-# # if not os.path.exists(args.prepared_data_path):
-# #     os.makedirs(args.prepared_data_path)
-# #     print(f"Created directory: {args.prepared_data_path}")
-    
-# # elif not os.path.isdir(args.prepared_data_path):
-# #     raise NotADirectoryError(f"{args.prepared_data_path} is not a directory.")
-
-
-# # TODO: Make sure that we still train the pre-train model if it doesn't exist.....
-# # if not exist then we create the original pre-train else we skip it and go to fine-tuning....
-# pretrain_check = os.listdir("./saved_models/BART_pretrained/") 
-# if len(pretrain_check) == 0:
-#     print("No pre-trained model found. Starting pre-training.")
-# else:
-#     print("Pre-trained model found. Skipping pre-training.")
-    
-# # NEED To integrate the above with the below...
-# # if not os.path.exists(args.prepared_data_path):
-# #     os.makedirs(args.prepared_data_path)
-# #     print(f"Created directory: {args.prepared_data_path}")
-# # elif not os.path.isdir(args.prepared_data_path):
-# #     raise NotADirectoryError(f"{args.prepared_data_path} is not a directory.")
-
-
-
-# try:
-#     df = pd.read_csv(args.selfies_dataset)
-# except FileNotFoundError:
-#     from prepare_dataset import prepare_dataset_for_pretrain
-#     print("No SEFLIES dataset")
-#     prepare_dataset_for_pretrain(path = args.smiles_dataset, save_to=args.selfies_dataset)
-#     df = pd.read_csv(args.selfies_dataset)
-# print("We have a SELFIES set for ya!")
-
-# # TODO: Need to apply the selfies translation somewhere here....
-
-# print("Creating SELFIES.txt for tokenization.")
-# from os.path import isfile  # returns True if the file exists else False.
-
-# if not isfile(args.prepared_data_path):
-#     from prepare_dataset import create_selfies_file
-
-#     if args.subset_size != 0:
-#         create_selfies_file(df, subset_size=args.subset_size, do_subset=True, save_to=args.prepared_data_path)
-#     else:
-#         create_selfies_file(df, do_subset=False, save_to=args.prepared_data_path) # prepared_data_path should also be configurable to be from the yaml? 
-# print("SELFIES .txt is ready for tokenization.")
-
-# print("Creating BPE tokenizer.")
-# if not isfile(args.bpe_path + "/merges.txt"):
-#     import prepare_dataset
-#     # TODO: This makes the bpe_tokenizer... but I do think in the prior file processing step. Maybe I need to separate this into this?
-#     prepare_dataset.bpe_tokenizer(path=args.prepared_data_path, save_to=args.bpe_path)
-# print("BPE Tokenizer is ready.")
-
-# # TODO: NEW I think this is where the if check works... we check here and see if it exists?
-# # We need to list a for-list with a YAML file that has multiple models in it... then we can iterate over the keys and train each model...
-# # This includes not only just the pre-training but also the fine-tuning... NOT JUST BART...
-# # RENAME BART to BART_pretrain as as the key....
-
-# # The pretrain would be the base for each fine-tuning...
-
-
-# # if model_name...
-
-# # This hyperparameters path will contain lots of things and all the models... so this isn't part of the if statement...
-# with open(args.hyperparameters_path) as file:
-#     hyperparameters = yaml.safe_load(file)
-
-# print("Loaded hyperparameters:", hyperparameters)  # Debug print to check the loaded hyperparameters
-
-
-
-# # Access the 'BART' key in the hyperparameters dictionary
-# # TODO: Modify this so then I can pass in multiple key's to create various models... The key name will be the model name directory folder name.
-# # Edit further to allow for multiple models to be trained in job submission. This would ideally set up and redefine the vocabulary for each model.
-# # This would be done by passing in a list of keys to the hyperparameters dictionary but would probably need to include additional parameters such as
-# # molecular weight, WHAT ELSE DID I UTILIZE IN MY SQL SCRIPT? I should be able to target particularly pertinent subsets of ChEMBL or other datasets...
-
-# bart_hyperparameters = hyperparameters.get("BART", {}) # This would have some model specific hyperparameters and probably be part of a for loop to iterate over the keys representing each model in the hyperparameters dictionary.
-# for key in bart_hyperparameters.keys():
-#     print("Starting pretraining with HIDDEN_SIZE parameter set.")
-#     WIP_BartSettings.train_and_save_BART(
-#         hyperparameters_dict=key,
-#         selfies_path=args.prepared_data_path, # UPDATE this should be based off of the yaml key... I think...
-#         bpe_path=args.bpe_path, # UPDATE this should be based off of the yaml key as well...
-#         save_to=f"./saved_models/BART_saved_model_{key}/" # This would utilize an f-string for the "BART_saved_model" so then I can get multiple saved models...
-#     )
-# print("Finished pretraining with HIDDEN_SIZE parameter set.\n---------------\n")
-
-
-# """
-# TODO: Figure out if I only need to pretrain once or if I need to do it for each model... I think I only need to do it once but I need to check that. 
-# Then I can fine-tune them all from there on subsets of data?
-
-# I would then have to parse if the `save_to` is pre-train or fine-tune and then adjust the training accordingly so it would go pre-train then filter and fine-tune....
-# this would allow me to do a model then the next one... then I can come back later and do molecular generation tasks...
-
-
-# TODO: Also need to work to add the fine tuning on that particular dataset....
-# Ideally the pretraining would include all the molecules but then the fine tuning would be done on a subset of the data.
-# This is where the MW and other factors would play into the model training phase. I could then 
-
-
-
-# TODO: This would involve adjusting the python script that does the SQL load in to include the molecular weight (and other factors) that I can feed into the sql query 
-# to save that subset then put into the fine-tune script....
-# """
- 
-# # END: train_for_pretrain.py
-
 import os
 import argparse
 import pandas as pd
@@ -284,6 +5,13 @@ import yaml
 from os.path import isfile
 import WIP_BartSettings
 from prepare_dataset import bpe_tokenizer, get_selfies_only, convert_to_selfies
+from Main5Finetuning_BaseNon import SelfiesDataset, collate_fn
+from torch.utils.data import Dataset, DataLoader
+from transformers import BartForConditionalGeneration, BartConfig
+from tokenizers import Tokenizer
+import torch
+from tqdm import tqdm  # Ensure you import the tqdm function
+
 
 def load_hyperparameters(path):
     with open(path, 'r') as file:
@@ -311,15 +39,6 @@ def prepare_data(args, key): # TODO: Integrate key into here.... where?
     print("Creating file for training!")
     if not isfile(f"./data/trainable_selfies_{key}.csv"):
         from prepare_dataset import prepare_dataset_for_pretrain
-    # create the read in model_name_{key}.csv file
-    # Convert to SELFIES
-    # create_selfies = pd.read_csv(f"model_name_{key}.csv")
-    # create_selfies["selfies"] = create_selfies["canonical_smiles"]
-    # create_selfies.selfies = create_selfies.selfies.parallel_apply(convert_to_selfies)
-    # df.drop(df[df.canonical_smiles == df.selfies].index, inplace=True)
-    # df.drop(columns=["canonical_smiles"], inplace=True)
-    # create_selfies_save_to = f"./data/trainable_selfies_{key}.csv"
-    # create_selfies.to_csv(create_selfies_save_to, index=False)
         prepare_dataset_for_pretrain(f"./model_name_{key}.csv",f"./data/trainable_selfies_{key}.csv")
     print(f"File for training is ready! (trainable_selfies_{key}.csv)")
     
@@ -338,15 +57,109 @@ def prepare_data(args, key): # TODO: Integrate key into here.... where?
         prepare_dataset.bpe_tokenizer(path=args.prepared_data_path, save_to=args.bpe_path)
     print("BPE Tokenizer is ready.")
 
-def train_model(hyperparameters, args, key):
-    print(f"Starting pretraining with {key} parameter set.")
-    WIP_BartSettings.train_and_save_BART(
-        hyperparameters_dict=hyperparameters[key],
-        selfies_path=f"./data/trainable_selfies_{key}.csv",
-        bpe_path=args.bpe_path,
-        save_to=f"./saved_models/{key}_saved_model/"
+
+def pretrain_BART(hyperparameters_dict, args, key):
+    # TODO: Integrate this into the code!
+    num_epochs = hyperparameters_dict[key]['TRAIN_EPOCHS']
+    optimizer_selection = hyperparameters_dict[key]['optimizer']
+    criterion_selection = hyperparameters_dict[key]['criterion']
+    learning_rate = hyperparameters_dict[key]['LEARNING_RATE']
+    
+    # Load the tokenizer and dataset
+    tokenizer = Tokenizer.from_file("./data/bpe_non/bpe.json") # TODO: FIX Imports!
+    pretrain_dataset = SelfiesDataset(csv_file=f"./data/trainable_selfies_{key}.csv", tokenizer_path=f"./data/bpe_filter_{key}/bpe.json", mode='pretrain')
+
+    # Create DataLoader
+    pretrain_loader = DataLoader(pretrain_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
+
+    config = BartConfig(
+        vocab_size=tokenizer.get_vocab_size(),  # Set vocab size including special tokens
+        max_position_embeddings=hyperparameters_dict[key]["MAX_POSITION_EMBEDDINGS"],  # Adjust based on your needs
+        encoder_layers=hyperparameters_dict[key]["ENCODER_LAYERS"], # TODO: make sure I can import this hyperparameters_dict correctly and interface it...
+        decoder_layers=hyperparameters_dict[key]["DECODER_LAYERS"],
+        encoder_attention_heads=hyperparameters_dict[key]["NUM_ENCODER_ATTENTION_HEADS"],
+        decoder_attention_heads=hyperparameters_dict[key]["NUM_DECODER_ATTENTION_HEADS"],
+        encoder_ffn_dim=hyperparameters_dict[key]["ENCODER_FFN_DIM"],
+        decoder_ffn_dim=hyperparameters_dict[key]["DECODER_FFN_DIM"],
+        hidden_size=hyperparameters_dict[key]["HIDDEN_SIZE"],  # Ensure this is divisible by the number of attention heads/ doesn't exist?
+        pad_token_id=tokenizer.token_to_id("<pad>"),
+        bos_token_id=tokenizer.token_to_id("<s>"),
+        eos_token_id=tokenizer.token_to_id("</s>"),
+        mask_token_id=tokenizer.token_to_id("<mask>")  # Ensure this matches the ID used during pre-training # Not in OTHER!
     )
-    print(f"Finished pretraining with {key} parameter set.\n---------------\n")
+    
+    model = BartForConditionalGeneration(config)
+    
+    
+    if optimizer_selection == "adam":
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    elif optimizer_selection == "adamw":
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    elif optimizer_selection == "sgd":
+        optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+    elif optimizer_selection == "adagrad":
+        optimizer = torch.optim.Adagrad(model.parameters(), lr=learning_rate)
+    elif optimizer_selection == "adadelta":
+        optimizer = torch.optim.Adadelta(model.parameters(), lr=learning_rate)
+    else:
+        raise ValueError(f"Invalid optimizer: {args.optimizer}")
+
+    if criterion_selection == "crossentropy":
+        criterion = torch.nn.CrossEntropyLoss()
+    elif criterion_selection == "nll":
+        criterion = torch.nn.NLLLoss()
+    elif criterion_selection == "poisson":
+        criterion = torch.nn.PoissonNLLLoss()
+    elif criterion_selection == "kldiv":
+        criterion = torch.nn.KLDivLoss()
+    elif criterion_selection == "bce":
+        criterion = torch.nn.BCELoss()
+    elif criterion_selection == "bcewithlogits":
+        criterion = torch.nn.BCEWithLogitsLoss()
+    elif criterion_selection == "marginranking":
+        criterion = torch.nn.MarginRankingLoss()
+    elif criterion_selection == "hingeembedding":
+        criterion = torch.nn.HingeEmbeddingLoss()
+    elif criterion_selection == "multilabelsoftmargin":
+        criterion = torch.nn.MultiLabelSoftMarginLoss()
+    elif criterion_selection == "smoothl1":
+        criterion = torch.nn.SmoothL1Loss()
+        
+    # Check for CUDA
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+
+    # Training loop
+    model.train()      # set epoch via hyperparameters... config... THINK ABOUT EARLY STOPPING ALSO!
+    for epoch in range(num_epochs):  # Number of epochs 
+        total_loss = 0
+        for batch in tqdm(pretrain_loader):
+            # set somewhere else... look into that... 
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+                                                            # makes sense I think?
+            # Forward pass (assuming self-supervised learning, labels = input_ids)
+            # TODO: Look into the model inputs.... it is just what is established above but should be good...
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+            
+            
+            # Compute loss and optimize
+            loss = outputs.loss
+            total_loss += loss.item()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        #TODO: DOES THIS LOOK RIGHT? 
+        # if args.early_stopping == True:
+        #   if total_loss < args.early_stopping_threshold: # total_loss is going to get continuously larger?
+        #       break
+        
+        print(f"Epoch {epoch + 1}, Loss: {total_loss / len(pretrain_loader)}")
+
+    # Save the model                # TODO: this is replaced by the model key name...
+    torch.save(model.state_dict(), './selfies_BART_finetuned.pth')
+    # model.state_dict() or what else?
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -369,7 +182,7 @@ def main():
         # args.prepared_data_path = f"./data/{key}_prepared_data.txt"
         args.prepared_data_path = f"./data/prepared_selfies_{key}.txt"
         args.bpe_path = f"./data/bpe_filter_{key}/"
-
+        
         # NEED TO TOKENIZE without SELFIES header up top and then feed in with selfies...
         # I ALSO Need to process to add in the inhibition site again? I think?
         # This is the confusing part....
@@ -383,7 +196,7 @@ def main():
         prepare_data(args, key)
 
         # Train model
-        train_model(bart_hyperparameters, args, key)
+        pretrain_BART(bart_hyperparameters, args, key)
 
 if __name__ == "__main__":
     main()
@@ -395,48 +208,99 @@ from torch.utils.data import DataLoader
 from transformers import BartForConditionalGeneration, BartConfig, AdamW
 from tqdm import tqdm
 
-# Load the tokenizer and dataset
-tokenizer = Tokenizer.from_file("./data/bpe_non/bpe.json")
-fine_tune_dataset = SelfiesDataset(csv_file='./ChEMBL34_druglike_activity.csv', tokenizer_path='./data/bpe_non/bpe.json', mode='finetune')
 
-# Create DataLoader
-fine_tune_loader = DataLoader(fine_tune_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
+# TODO: BELOW: Should be good here... tokenizer.from_file comes from the 
+# hyperparams key name dictates the bpe_non portion....
 
-# Initialize BART model
-config = BartConfig(
-    vocab_size=tokenizer.get_vocab_size(),
-    max_position_embeddings=1024,
-    encoder_layers=6,
-    decoder_layers=6,
-    encoder_attention_heads=12,
-    decoder_attention_heads=12,
-    encoder_ffn_dim=3072,
-    decoder_ffn_dim=3072,
-    hidden_size=1152,
-    pad_token_id=tokenizer.token_to_id("<pad>"),
-    bos_token_id=tokenizer.token_to_id("<s>"),
-    eos_token_id=tokenizer.token_to_id("</s>")
-)
+# # Load the tokenizer and dataset
+# tokenizer = Tokenizer.from_file("./data/bpe_non/bpe.json")
+# # same with tokenizer? and csv file... mode is depends on the script...
+# # this one is just for pretrain for this code file...
+# fine_tune_dataset = SelfiesDataset(csv_file='./ChEMBL34_druglike_activity.csv', tokenizer_path='./data/bpe_non/bpe.json', mode='finetune')
+
+# # Create DataLoader
+# fine_tune_loader = DataLoader(fine_tune_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
+
+
+# TODO: BELOW FIX I think this is configured somewhere else... LOOK
+# config = BartConfig(
+#     vocab_size=tokenizer.get_vocab_size(),  # Set vocab size including special tokens
+#     max_position_embeddings=hyperparameters_dict["MAX_POSITION_EMBEDDINGS"],  # Adjust based on your needs
+#     encoder_layers=hyperparameters_dict["ENCODER_LAYERS"],
+#     decoder_layers=hyperparameters_dict["DECODER_LAYERS"],
+#     encoder_attention_heads=hyperparameters_dict["NUM_ENCODER_ATTENTION_HEADS"],
+#     decoder_attention_heads=hyperparameters_dict["NUM_DECODER_ATTENTION_HEADS"],
+#     encoder_ffn_dim=hyperparameters_dict["ENCODER_FFN_DIM"],
+#     decoder_ffn_dim=hyperparameters_dict["DECODER_FFN_DIM"],
+#     hidden_size=hyperparameters_dict["HIDDEN_SIZE"],  # Ensure this is divisible by the number of attention heads/ doesn't exist?
+#     pad_token_id=tokenizer.token_to_id("<pad>"),
+#     bos_token_id=tokenizer.token_to_id("<s>"),
+#     eos_token_id=tokenizer.token_to_id("</s>"),
+#     mask_token_id=tokenizer.token_to_id("<mask>")  # Ensure this matches the ID used during pre-training # Not in OTHER!
+# )
+
 model = BartForConditionalGeneration(config)
 
 # Optimizer and loss function
 optimizer = AdamW(model.parameters(), lr=0.0001)
 criterion = torch.nn.CrossEntropyLoss()
+# TODO: ABOVE FIX figure out a way how to play with optimizeer and the learning rate...
+# along with the criterion loss function...
+# if args.optimizer == "adam":
+#    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+# elif args.optimizer == "adamw":
+#    optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
+# elif args.optimizer == "sgd":
+#    optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
+# elif args.optimizer == "adagrad":
+#    optimizer = torch.optim.Adagrad(model.parameters(), lr=args.learning_rate)
+# elif args.optimizer == "adadelta":
+#    optimizer = torch.optim.Adadelta(model.parameters(), lr=args.learning_rate)
+# else:
+#    raise ValueError(f"Invalid optimizer: {args.optimizer}")
+
+# if args.criterion == "crossentropy":
+#    criterion = torch.nn.CrossEntropyLoss()
+# elif args.criterion == "nll":
+#    criterion = torch.nn.NLLLoss()
+# elif args.criterion == "poisson":
+#    criterion = torch.nn.PoissonNLLLoss()
+# elif args.criterion == "kldiv":
+#    criterion = torch.nn.KLDivLoss()
+# elif args.criterion == "bce":
+#    criterion = torch.nn.BCELoss()
+# elif args.criterion == "bcewithlogits":
+#    criterion = torch.nn.BCEWithLogitsLoss()
+# elif args.criterion == "marginranking":
+#    criterion = torch.nn.MarginRankingLoss()
+# elif args.criterion == "hingeembedding":
+#    criterion = torch.nn.HingeEmbeddingLoss()
+# elif args.criterion == "multilabelsoftmargin":
+#    criterion = torch.nn.MultiLabelSoftMarginLoss()
+# elif args.criterion == "smoothl1":
+#    criterion = torch.nn.SmoothL1Loss()
+
+# TODO: Just explore those more! Look into torch optimizers and criterions/loss functions...
+
+
 
 # Check for CUDA
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 
 # Training loop
-model.train()
+model.train()      # set epoch via hyperparameters... config... THINK ABOUT EARLY STOPPING ALSO!
 for epoch in range(10):  # Number of epochs
     total_loss = 0
     for batch in tqdm(fine_tune_loader):
+        # set somewhere else... look into that... 
         input_ids = batch['input_ids'].to(device)
         attention_mask = batch['attention_mask'].to(device)
-        
+                                                           # makes sense I think?
         # Forward pass (assuming self-supervised learning, labels = input_ids)
+        # TODO: Look into the model inputs.... it is just what is established above but should be good...
         outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+        
         
         # Compute loss and optimize
         loss = outputs.loss
@@ -447,8 +311,112 @@ for epoch in range(10):  # Number of epochs
 
     print(f"Epoch {epoch + 1}, Loss: {total_loss / len(fine_tune_loader)}")
 
-# Save the model
+# Save the model                # TODO: this is replaced by the model key name...
 torch.save(model.state_dict(), './selfies_BART_finetuned.pth')
+
+
+def pretrain_BART(args, key):
+    # Load the tokenizer and dataset
+    tokenizer = Tokenizer.from_file("./data/bpe_non/bpe.json")
+    # same with tokenizer? and csv file... mode is depends on the script...
+    # this one is just for pretrain for this code file...
+    fine_tune_dataset = SelfiesDataset(csv_file='./ChEMBL34_druglike_activity.csv', tokenizer_path='./data/bpe_non/bpe.json', mode='finetune')
+                                                 # need to get this                  # key/spmething else?                    # maybe remove? not part of the mode... this is pretrain, not finetune...
+                                        # CSV with all the columns!...               # args.bpe_path/bpe.json? some path.join thing?             
+    # Create DataLoader
+    fine_tune_loader = DataLoader(fine_tune_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
+
+    config = BartConfig(
+        vocab_size=tokenizer.get_vocab_size(),  # Set vocab size including special tokens
+        max_position_embeddings=hyperparameters_dict["MAX_POSITION_EMBEDDINGS"],  # Adjust based on your needs
+        encoder_layers=hyperparameters_dict["ENCODER_LAYERS"],
+        decoder_layers=hyperparameters_dict["DECODER_LAYERS"],
+        encoder_attention_heads=hyperparameters_dict["NUM_ENCODER_ATTENTION_HEADS"],
+        decoder_attention_heads=hyperparameters_dict["NUM_DECODER_ATTENTION_HEADS"],
+        encoder_ffn_dim=hyperparameters_dict["ENCODER_FFN_DIM"],
+        decoder_ffn_dim=hyperparameters_dict["DECODER_FFN_DIM"],
+        hidden_size=hyperparameters_dict["HIDDEN_SIZE"],  # Ensure this is divisible by the number of attention heads/ doesn't exist?
+        pad_token_id=tokenizer.token_to_id("<pad>"),
+        bos_token_id=tokenizer.token_to_id("<s>"),
+        eos_token_id=tokenizer.token_to_id("</s>"),
+        mask_token_id=tokenizer.token_to_id("<mask>")  # Ensure this matches the ID used during pre-training # Not in OTHER!
+    )
+    
+    model = BartForConditionalGeneration(config)
+    
+    # Optimizer and loss function
+    # DEFAULT IS AdamW/CrossEntropyLoss...?
+    optimizer = AdamW(model.parameters(), lr=0.0001)
+    criterion = torch.nn.CrossEntropyLoss()
+
+    if args.optimizer == "adam":
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    elif args.optimizer == "adamw":
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
+    elif args.optimizer == "sgd":
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
+    elif args.optimizer == "adagrad":
+        optimizer = torch.optim.Adagrad(model.parameters(), lr=args.learning_rate)
+    elif args.optimizer == "adadelta":
+        optimizer = torch.optim.Adadelta(model.parameters(), lr=args.learning_rate)
+    else:
+        raise ValueError(f"Invalid optimizer: {args.optimizer}")
+
+    if args.criterion == "crossentropy":
+        criterion = torch.nn.CrossEntropyLoss()
+    elif args.criterion == "nll":
+        criterion = torch.nn.NLLLoss()
+    elif args.criterion == "poisson":
+        criterion = torch.nn.PoissonNLLLoss()
+    elif args.criterion == "kldiv":
+        criterion = torch.nn.KLDivLoss()
+    elif args.criterion == "bce":
+        criterion = torch.nn.BCELoss()
+    elif args.criterion == "bcewithlogits":
+        criterion = torch.nn.BCEWithLogitsLoss()
+    elif args.criterion == "marginranking":
+        criterion = torch.nn.MarginRankingLoss()
+    elif args.criterion == "hingeembedding":
+        criterion = torch.nn.HingeEmbeddingLoss()
+    elif args.criterion == "multilabelsoftmargin":
+        criterion = torch.nn.MultiLabelSoftMarginLoss()
+    elif args.criterion == "smoothl1":
+        criterion = torch.nn.SmoothL1Loss()
+        
+    # Check for CUDA
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+
+    # Training loop
+    model.train()      # set epoch via hyperparameters... config... THINK ABOUT EARLY STOPPING ALSO!
+    for epoch in range(10):  # Number of epochs
+        total_loss = 0
+        for batch in tqdm(fine_tune_loader):
+            # set somewhere else... look into that... 
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+                                                            # makes sense I think?
+            # Forward pass (assuming self-supervised learning, labels = input_ids)
+            # TODO: Look into the model inputs.... it is just what is established above but should be good...
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+            
+            
+            # Compute loss and optimize
+            loss = outputs.loss
+            total_loss += loss.item()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        #TODO: DOES THIS LOOK RIGHT? 
+        # if args.early_stopping == True:
+        #   if total_loss < args.early_stopping_threshold: # total_loss is going to get continuously larger?
+        #       break
+        
+        print(f"Epoch {epoch + 1}, Loss: {total_loss / len(fine_tune_loader)}")
+
+    # Save the model                # TODO: this is replaced by the model key name...
+    torch.save(model.state_dict(), './selfies_BART_finetuned.pth')
+    # model.state_dict() or what else?
 """
 # NOTES BELOW TODO:
 """
@@ -470,4 +438,27 @@ I think I have it in:
 Main5Finetuning.py... work through refactoring the logic to work with this setup...
 pretrain_dataset = SelfiesDataset(csv_file='./OrigFileSQL_Cleaned_SELFIES_READY.csv', tokenizer_path='./data/bpe/bpe.json', mode='finetune')
 TODO: I think this involves pushing the current code, cleaning it up, then pushing the new restructured code?
+
+TODO: New code is the old training routine... pytorch base training...
+"""
+
+
+"""
+
+# Initialize BART model
+config = BartConfig(
+    vocab_size=tokenizer.get_vocab_size(),
+    max_position_embeddings=1024,
+    encoder_layers=6,
+    decoder_layers=6,
+    encoder_attention_heads=12,
+    decoder_attention_heads=12,
+    encoder_ffn_dim=3072,
+    decoder_ffn_dim=3072,
+    hidden_size=1152,
+    pad_token_id=tokenizer.token_to_id("<pad>"),
+    bos_token_id=tokenizer.token_to_id("<s>"),
+    eos_token_id=tokenizer.token_to_id("</s>")
+)
+
 """

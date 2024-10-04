@@ -589,7 +589,7 @@ for model_name, filters in model_hyperparams.items():
     # bpe_tokenizer(selfies_save_to, save_to=bpe_save_to)
 
     # print(f"SELFIES data saved to {selfies_save_to} and tokenized at {bpe_save_to}")
-    print(f"Filtered data is saved to the path: {filtered_filename}")
+    # print(f"Filtered data is saved to the path: {filtered_filename}")
 
 # TODO: So then I would load the properties_df just the canonical smiles and then do the vocabulary building
 # Which would be based off the key of the model... So I would have to loop through the keys of the model
