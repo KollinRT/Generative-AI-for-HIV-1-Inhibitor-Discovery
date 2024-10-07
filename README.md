@@ -123,4 +123,7 @@ Then this makes us our `model_name_{key}` .csv of the data with the columns need
 
 To proceed with finetuning, we need to....
 
-`
+To run this pretraining we use
+```python3
+python3 train_for_pretrain.py --yaml="./PretrainSpecs.yml"
+```
