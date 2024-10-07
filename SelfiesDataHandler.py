@@ -192,25 +192,6 @@ from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 from tokenizers import Tokenizer
 
-# def collate_fn(batch):
-#     # If the dataset returns dictionaries (mode='finetune')
-#     if isinstance(batch[0], dict):
-#         # Padding input IDs
-#         input_ids = pad_sequence([item['input_ids'] for item in batch], batch_first=True, padding_value=0)
-
-#         # Stack IC50 and inhibition site data
-#         ic50 = torch.stack([item['IC50'] for item in batch])
-#         inhibition_site = torch.stack([item['inhibition_site'] for item in batch])
-
-#         return {
-#             'input_ids': input_ids,
-#             'IC50': ic50,
-#             'inhibition_site': inhibition_site
-#         }
-#     else:  # Pretraining mode, where only input_ids are expected
-#         input_ids = pad_sequence(batch, batch_first=True, padding_value=0)
-#         return input_ids
-
 def collate_fn(batch):
     if isinstance(batch[0], dict):
         # Fine-tuning mode
@@ -232,7 +213,6 @@ def collate_fn(batch):
             'attention_mask': (input_ids != 0).long(),  # Create an attention mask (1 for actual tokens, 0 for padding)
             # You may need to add more keys depending on what your model expects, like 'decoder_input_ids'
         }
-
 
 class SelfiesDataset(Dataset):
     def __init__(self, csv_file, tokenizer_path, mode='pretrain'):

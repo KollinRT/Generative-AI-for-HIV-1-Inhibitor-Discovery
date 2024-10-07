@@ -203,7 +203,7 @@ from torch.utils.data import DataLoader
 import torch
 import math
 
-from Main5Finetuning_BaseNon import SelfiesDataset, collate_fn
+from SelfiesDataHandler import SelfiesDataset, collate_fn
 
 def train_and_save_BART(hyperparameters_dict, selfies_path="./data/selfies_subset.txt", bpe_path="./data/bpe/", save_to="./models/saved_model/"):
     print("Hyperparameters used for training:", hyperparameters_dict)

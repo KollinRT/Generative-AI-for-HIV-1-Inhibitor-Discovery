@@ -38,24 +38,9 @@ def prepare_data(args, key): # TODO: Integrate key into here.... where?
         from prepare_dataset import prepare_dataset_for_pretrain
         prepare_dataset_for_pretrain(f"./model_name_{key}.csv",f"./data/trainable_selfies_{key}.csv")
     print(f"File for training is ready! (trainable_selfies_{key}.csv)")
-    
-    # TODO: Create the selfies.txt for the bpe tokenizer...
-    # But to train the model we need to have the inhibition site and IC50 values and selfies
-    # So training has the big dataset but bpe has little...
-    
-    # BPE is created for args.prepared_data_path... and saved to arg.bpe_path
-    
-    # Do I need to create two files? One for tokenizer and one for the selfies file with all columns
-    # this would be the file spat out into the model...
-    
-    print("Creating BPE tokenizer.")
-    if not isfile(args.bpe_path + "/merges.txt"):
-        import prepare_dataset
-        prepare_dataset.bpe_tokenizer(path=args.prepared_data_path, save_to=args.bpe_path)
-    print("BPE Tokenizer is ready.")
+        
 
-
-def pretrain_BART(hyperparameters_dict, args, key):
+def finetune_BART(hyperparameters_dict, args, key):
     # TODO: Integrate this into the code!
     num_epochs = hyperparameters_dict[key]['TRAIN_EPOCHS']
     optimizer_selection = hyperparameters_dict[key]['optimizer']
@@ -64,29 +49,18 @@ def pretrain_BART(hyperparameters_dict, args, key):
     
     # Load the tokenizer and dataset
     tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
-    pretrain_dataset = SelfiesDataset(csv_file=f"./data/trainable_selfies_{key}.csv", tokenizer_path=f"./data/bpe_filter_{key}/bpe.json", mode='pretrain')
+    # TODO: THIS IS WHERE THE FINE DATASET IS LOADED....
+    # THIS IS THE SAME FINETUNING DATASET USED FOR ALL OF THE MODELS...
+    # I CAN LOOP OVER THE KEYS BUT KEEP IT THE SAME BUT FEED IN THE DIFFERENT MODELS...
+    # I ONLY NEED TO GET THE FINETUNED SELFIES DATASET ONCE... WITH GETDATAFINETUNE.... 
+    # THIS CAN BE HARDCODED FOR BOTH!                                                 # make sure the tokenizer from pretrain is here also...
+    finetune_dataset = SelfiesDataset(csv_file=f"./smiles_finetune_data_properties.csv", tokenizer_path=f"./data/bpe_filter_{key}/bpe.json", mode='finetune')
 
     # Create DataLoader
-    pretrain_loader = DataLoader(pretrain_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
+    finetune_loader = DataLoader(finetune_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
 
-    config = BartConfig(
-        vocab_size=tokenizer.get_vocab_size(),  # Set vocab size including special tokens
-        max_position_embeddings=hyperparameters_dict[key]["MAX_POSITION_EMBEDDINGS"],  # Adjust based on your needs
-        encoder_layers=hyperparameters_dict[key]["ENCODER_LAYERS"], # TODO: make sure I can import this hyperparameters_dict correctly and interface it...
-        decoder_layers=hyperparameters_dict[key]["DECODER_LAYERS"],
-        encoder_attention_heads=hyperparameters_dict[key]["NUM_ENCODER_ATTENTION_HEADS"],
-        decoder_attention_heads=hyperparameters_dict[key]["NUM_DECODER_ATTENTION_HEADS"],
-        encoder_ffn_dim=hyperparameters_dict[key]["ENCODER_FFN_DIM"],
-        decoder_ffn_dim=hyperparameters_dict[key]["DECODER_FFN_DIM"],
-        hidden_size=hyperparameters_dict[key]["HIDDEN_SIZE"],  # Ensure this is divisible by the number of attention heads/ doesn't exist?
-        pad_token_id=tokenizer.token_to_id("<pad>"),
-        bos_token_id=tokenizer.token_to_id("<s>"),
-        eos_token_id=tokenizer.token_to_id("</s>"),
-        mask_token_id=tokenizer.token_to_id("<mask>")  # Ensure this matches the ID used during pre-training # Not in OTHER!
-    )
-    
-    model = BartForConditionalGeneration(config)
-    
+    # TODO: update with the format for the model it should be... the correct model name....
+    model = BartForConditionalGeneration.from_pretrained(f'./selfies_BART_pretrained_{key}.pth')    
     
     if optimizer_selection == "adam":
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -130,7 +104,7 @@ def pretrain_BART(hyperparameters_dict, args, key):
     model.train()      # set epoch via hyperparameters... config... THINK ABOUT EARLY STOPPING ALSO!
     for epoch in range(num_epochs):  # Number of epochs 
         total_loss = 0
-        for batch in tqdm(pretrain_loader):
+        for batch in tqdm(finetune_loader):
             # set somewhere else... look into that... 
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
@@ -151,10 +125,10 @@ def pretrain_BART(hyperparameters_dict, args, key):
         #   if total_loss < args.early_stopping_threshold: # total_loss is going to get continuously larger?
         #       break
         
-        print(f"Epoch {epoch + 1}, Loss: {total_loss / len(pretrain_loader)}")
+        print(f"Epoch {epoch + 1}, Loss: {total_loss / len(finetune_loader)}")
 
     # Save the model                # TODO: this is replaced by the model key name...
-    torch.save(model.state_dict(), './selfies_BART_pretrained_{key}.pth')
+    torch.save(model.state_dict(), './selfies_BART_finetuned_{key}.pth')
     # model.state_dict() or what else?
 
 
@@ -184,32 +158,12 @@ def main():
         prepare_data(args, key)
 
         # Train model
-        pretrain_BART(bart_hyperparameters, args, key)
+        finetune_BART(bart_hyperparameters, args, key)
 
 if __name__ == "__main__":
     main()
     
-
-# NOTES BELOW TODO:
 """
-I think I need to look at the model and make it a function that is configurable... 
-I do not think that transformers API will work well for this...
-sadly... Just get my old code training loop to work!
-
-I have pretrain and finetune training code, I think?
-I have the BartConfig also established in my WIP_BartSettings.py file...
-    Look into that and see if I can get that to work...!
-        Have hyperparameters also define the optimizer... and the loss function...
-            It should be in here... I need to rewrite the workflow...
-
-It is defined in `def train_and_save_BART(hyperparameters_dict, selfies_path="./data/selfies_subset.txt", bpe_path="./data/bpe/", save_to="./models/saved_model/"):`
-
-NEED to differentiate between pretrain and fine-tune... Which has IC50/inhibition_site and which does not?
-
-I think I have it in:
-Main5Finetuning.py... work through refactoring the logic to work with this setup...
-pretrain_dataset = SelfiesDataset(csv_file='./OrigFileSQL_Cleaned_SELFIES_READY.csv', tokenizer_path='./data/bpe/bpe.json', mode='finetune')
-TODO: I think this involves pushing the current code, cleaning it up, then pushing the new restructured code?
-
-TODO: New code is the old training routine... pytorch base training...
+TODO: Finetuning data requires the specific dataset from the beginning...
+it needs to have site_name for it... My pretrain data does NOT need it...
 """

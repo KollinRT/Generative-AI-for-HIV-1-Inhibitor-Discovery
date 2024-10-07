@@ -1,8 +1,8 @@
-from Main5Finetuning_BaseNon import SelfiesTokenizer
+from SelfiesDataHandler import SelfiesTokenizer
 from transformers import BartForConditionalGeneration, BartConfig
 import pandas as pd
 from tokenizers import Tokenizer
-from Main5Finetuning_BaseNon import SelfiesDataset
+from SelfiesDataHandler import SelfiesDataset
 from torch.utils.data import Dataset, DataLoader
 import torch
 from transformers import Trainer, TrainingArguments
