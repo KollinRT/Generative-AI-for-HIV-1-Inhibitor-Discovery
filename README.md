@@ -115,7 +115,7 @@ This returns a `.csv` file with
 Next we proceed with 
 
 ```bash
-python3 MakeDefaultHyperparams.py. --file "./FinetuneSpecs.yml"
+python3 MakeDefaultHyperparams.py. --file "./PretrainSpecs.yml"
 ```
 This will make the `combined_config.yml` file with some default hyperparameters...
 
