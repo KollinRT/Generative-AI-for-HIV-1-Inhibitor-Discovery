@@ -171,7 +171,7 @@ def generate_text(model, tokenizer, input_text, max_length=50, num_return_sequen
 
 if __name__ == "__main__":
     # Specify the paths to the model and tokenizer
-    model_path = './selfies_BART_finetuned_model.pth'  # Path to the saved state dictionary
+    model_path = f'./selfies_BART_finetuned_{key}.pth'  # Path to the saved state dictionary
     tokenizer_path = 'facebook/bart-base'  # Use the pre-trained tokenizer from Hugging Face
 
     # Set the device to use (either 'cuda' or 'cpu')

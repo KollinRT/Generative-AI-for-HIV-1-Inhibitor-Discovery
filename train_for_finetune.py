@@ -128,7 +128,7 @@ def finetune_BART(hyperparameters_dict, args, key):
         print(f"Epoch {epoch + 1}, Loss: {total_loss / len(finetune_loader)}")
 
     # Save the model                # TODO: this is replaced by the model key name...
-    torch.save(model.state_dict(), './selfies_BART_finetuned_{key}.pth')
+    torch.save(model.state_dict(), f'./selfies_BART_finetuned_{key}.pth')
     # model.state_dict() or what else?
 
 
