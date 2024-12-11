@@ -228,7 +228,7 @@ class SelfiesDataset(Dataset):
 
     def __getitem__(self, idx):
         """Retrieve an item by index."""
-        print(f"Columns are: {self.data.columns}") # DEBUG
+        #print(f"Columns are: {self.data.columns}") # DEBUG
 
         selfies_string = self.data.iloc[idx]['selfies']  # Update this if the column name is different
         encoded = self.tokenizer.encode(selfies_string)

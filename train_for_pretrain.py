@@ -213,3 +213,9 @@ TODO: I think this involves pushing the current code, cleaning it up, then pushi
 
 TODO: New code is the old training routine... pytorch base training...
 """
+
+
+"""
+So, this code. It should check to see if the pretrained model exists, then if not train the model...
+- - Or do I still want it do it for every one? Question is to filter at pre-train or at fine-tune? I could make a second file that has pre-train filtering and check those metrics... regardless, I need to get logging enabled along with early stopping?
+"""
