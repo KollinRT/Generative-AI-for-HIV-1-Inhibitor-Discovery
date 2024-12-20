@@ -62,7 +62,10 @@ def pretrain_BART(hyperparameters_dict, args, key):
     optimizer_selection = hyperparameters_dict[key]['optimizer']
     criterion_selection = hyperparameters_dict[key]['criterion']
     learning_rate = hyperparameters_dict[key]['LEARNING_RATE']
-    
+    early_stopping_toggle = hyperparameters_dict[key]["early_stopping_toggle"]
+    early_stopping_threshold = hyperparameters_dict[key]["early_stopping_threshold"]
+    early_stopping_patience = hyperparameters_dict[key]["early_stopping_patience"]
+
     # Load the tokenizer and dataset
     tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
     pretrain_dataset = SelfiesDataset(csv_file=f"./data/trainable_selfies_{key}.csv", tokenizer_path=f"./data/bpe_filter_{key}/bpe.json", mode='pretrain')
@@ -133,6 +136,10 @@ def pretrain_BART(hyperparameters_dict, args, key):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
 
+        # Training loop variables initated for early stopping
+        best_loss = float('inf')
+        patience_counter = 0
+
         # Training loop
         model.train()      # set epoch via hyperparameters... config... THINK ABOUT EARLY STOPPING ALSO!
         for epoch in range(num_epochs):  # Number of epochs 
@@ -157,7 +164,10 @@ def pretrain_BART(hyperparameters_dict, args, key):
             # if args.early_stopping == True:
             #   if total_loss < args.early_stopping_threshold: # total_loss is going to get continuously larger?
             #       break
-            
+
+            # Calculate average loss for the epoch
+            avg_loss = total_loss / len(pretrain_loader)
+
             # Log the loss every 5 epochs
             if (epoch + 1) % 5 == 0:
                 print(f"Epoch {epoch + 1}, Loss: {total_loss / len(pretrain_loader)}")
@@ -166,9 +176,16 @@ def pretrain_BART(hyperparameters_dict, args, key):
             csv_writer.writerow([epoch + 1, total_loss / len(pretrain_loader)])
 
             # Early stopping (if enabled)
-            if args.early_stopping and total_loss < args.early_stopping_threshold:
-                print("Early stopping triggered")
-                break
+            if early_stopping_toggle:
+                if avg_loss < best_loss:
+                    best_loss = avg_loss
+                    patience_counter = 0  # Reset patience counter if there's improvement
+                else:
+                    patience_counter += 1
+
+                if patience_counter >= early_stopping_patience:
+                    print(f"Early stopping triggered after epoch {epoch + 1}")
+                    break
 
             print(f"Epoch {epoch + 1}, Loss: {total_loss / len(pretrain_loader)}")
 
