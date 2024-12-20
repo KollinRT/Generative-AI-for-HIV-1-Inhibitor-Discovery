@@ -160,10 +160,10 @@ def pretrain_BART(hyperparameters_dict, args, key):
             
             # Log the loss every 5 epochs
             if (epoch + 1) % 5 == 0:
-                print(f"Epoch {epoch + 1}, Loss: {total_loss / len(finetune_loader)}")
+                print(f"Epoch {epoch + 1}, Loss: {total_loss / len(pretrain_loader)}")
 
             # Save the epoch and loss to the CSV file
-            csv_writer.writerow([epoch + 1, total_loss / len(finetune_loader)])
+            csv_writer.writerow([epoch + 1, total_loss / len(pretrain_loader)])
 
             # Early stopping (if enabled)
             if args.early_stopping and total_loss < args.early_stopping_threshold:
