@@ -29,7 +29,28 @@ default_config = OrderedDict([
     ("optimizer", "adam"),
     ("criterion", "crossentropy")
 ])
+# TODO: Add early stopping here:
+"""
+Plan of attack:
+1. early_stopping_enable = true/false Boolean
+2. early_stopping_threshold = Difference? Float
+3. early_stopping_patience = Difference in steps? Int
 
+The first is required to toggle the second or third? Patience is interesting in which we check the number of steps since the last improvement. We just want it to improve more! If it gets worse than the best, we keep stacking up...
+
+    # Early stopping logic
+    if early_stopping_enabled:
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            patience_counter = 0  # Reset patience counter if there's improvement
+        else:
+            patience_counter += 1
+
+        if patience_counter >= early_stopping_patience:
+            print(f"Early stopping triggered after epoch {epoch + 1}")
+            break
+
+"""
 
 
 # Path to the additional configurations YAML file
