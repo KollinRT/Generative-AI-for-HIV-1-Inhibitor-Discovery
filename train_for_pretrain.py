@@ -121,41 +121,59 @@ def pretrain_BART(hyperparameters_dict, args, key):
         criterion = torch.nn.MultiLabelSoftMarginLoss()
     elif criterion_selection == "smoothl1":
         criterion = torch.nn.SmoothL1Loss()
-        
-    # Check for CUDA
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
+    
+    csv_file_path = f'./pretraining_loss_{key}.csv' # TODO: Update file names here!
+    with open(csv_file_path, mode='w', newline='') as csv_file:
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(['Epoch', 'Loss'])  # Write the header
 
-    # Training loop
-    model.train()      # set epoch via hyperparameters... config... THINK ABOUT EARLY STOPPING ALSO!
-    for epoch in range(num_epochs):  # Number of epochs 
-        total_loss = 0
-        for batch in tqdm(pretrain_loader):
-            # set somewhere else... look into that... 
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-                                                            # makes sense I think?
-            # Forward pass (assuming self-supervised learning, labels = input_ids)
-            # TODO: Look into the model inputs.... it is just what is established above but should be good...
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
-            
-            
-            # Compute loss and optimize
-            loss = outputs.loss
-            total_loss += loss.item()
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-        #TODO: DOES THIS LOOK RIGHT? 
-        # if args.early_stopping == True:
-        #   if total_loss < args.early_stopping_threshold: # total_loss is going to get continuously larger?
-        #       break
-        
-        print(f"Epoch {epoch + 1}, Loss: {total_loss / len(pretrain_loader)}")
+    
+        # Check for CUDA
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
 
-    # Save the model                # TODO: this is replaced by the model key name...
-    torch.save(model.state_dict(), f'./selfies_BART_pretrained_{key}.pth')
-    # model.state_dict() or what else?
+        # Training loop
+        model.train()      # set epoch via hyperparameters... config... THINK ABOUT EARLY STOPPING ALSO!
+        for epoch in range(num_epochs):  # Number of epochs 
+            total_loss = 0
+            for batch in tqdm(pretrain_loader):
+                # set somewhere else... look into that... 
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                                                                # makes sense I think?
+                # Forward pass (assuming self-supervised learning, labels = input_ids)
+                # TODO: Look into the model inputs.... it is just what is established above but should be good...
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+                
+                
+                # Compute loss and optimize
+                loss = outputs.loss
+                total_loss += loss.item()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+            #TODO: DOES THIS LOOK RIGHT? 
+            # if args.early_stopping == True:
+            #   if total_loss < args.early_stopping_threshold: # total_loss is going to get continuously larger?
+            #       break
+            
+            # Log the loss every 5 epochs
+            if (epoch + 1) % 5 == 0:
+                print(f"Epoch {epoch + 1}, Loss: {total_loss / len(finetune_loader)}")
+
+            # Save the epoch and loss to the CSV file
+            csv_writer.writerow([epoch + 1, total_loss / len(finetune_loader)])
+
+            # Early stopping (if enabled)
+            if args.early_stopping and total_loss < args.early_stopping_threshold:
+                print("Early stopping triggered")
+                break
+
+            print(f"Epoch {epoch + 1}, Loss: {total_loss / len(pretrain_loader)}")
+
+        # Save the model                # TODO: this is replaced by the model key name...
+        torch.save(model.state_dict(), f'./selfies_BART_pretrained_{key}.pth')
+        # model.state_dict() or what else?
 
 
 def main():
