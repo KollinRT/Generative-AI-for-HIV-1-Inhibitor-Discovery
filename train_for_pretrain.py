@@ -88,7 +88,8 @@ def pretrain_BART(hyperparameters_dict, args, key):
         eos_token_id=tokenizer.token_to_id("</s>"),
         mask_token_id=tokenizer.token_to_id("<mask>")  # Ensure this matches the ID used during pre-training # Not in OTHER!
     )
-    
+
+
     model = BartForConditionalGeneration(config)
     
     
@@ -142,25 +143,25 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
         # Training loop
         model.train()      # set epoch via hyperparameters... config... THINK ABOUT EARLY STOPPING ALSO!
-        for epoch in range(num_epochs):  # Number of epochs 
+        for epoch in range(num_epochs):  # Number of epochs
             total_loss = 0
             for batch in tqdm(pretrain_loader):
-                # set somewhere else... look into that... 
+                # set somewhere else... look into that...
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
                                                                 # makes sense I think?
                 # Forward pass (assuming self-supervised learning, labels = input_ids)
                 # TODO: Look into the model inputs.... it is just what is established above but should be good...
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
-                
-                
+
+
                 # Compute loss and optimize
                 loss = outputs.loss
                 total_loss += loss.item()
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-            #TODO: DOES THIS LOOK RIGHT? 
+            #TODO: DOES THIS LOOK RIGHT?
             # if args.early_stopping == True:
             #   if total_loss < args.early_stopping_threshold: # total_loss is going to get continuously larger?
             #       break
@@ -170,10 +171,11 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
             # Log the loss every 5 epochs
             if (epoch + 1) % 5 == 0:
-                print(f"Epoch {epoch + 1}, Loss: {total_loss / len(pretrain_loader)}")
+                print(f"Epoch {epoch + 1}, Loss: {avg_loss}")
 
             # Save the epoch and loss to the CSV file
-            csv_writer.writerow([epoch + 1, total_loss / len(pretrain_loader)])
+            csv_writer.writerow([epoch + 1, avg_loss])
+            csv_file.flush() # Ensure it writes at the end of each epoch
 
             # Early stopping (if enabled)
             if early_stopping_toggle:
@@ -187,7 +189,7 @@ def pretrain_BART(hyperparameters_dict, args, key):
                     print(f"Early stopping triggered after epoch {epoch + 1}")
                     break
 
-            print(f"Epoch {epoch + 1}, Loss: {total_loss / len(pretrain_loader)}")
+            print(f"Epoch {epoch + 1}, Loss: {avg_loss}") # This may be erased!
 
         # Save the model                # TODO: this is replaced by the model key name...
         torch.save(model.state_dict(), f'./selfies_BART_pretrained_{key}.pth')
@@ -254,4 +256,12 @@ TODO: New code is the old training routine... pytorch base training...
 """
 So, this code. It should check to see if the pretrained model exists, then if not train the model...
 - - Or do I still want it do it for every one? Question is to filter at pre-train or at fine-tune? I could make a second file that has pre-train filtering and check those metrics... regardless, I need to get logging enabled along with early stopping?
+"""
+
+
+"""
+#TODO: 12/20/2024: So, I need to write the code for finetuning... It needs to query the particular molecules? Or it needs to do them all?
+I think doing all the finetuning molecules rather than a subset is what is better!
+- This should mean finalizing the query for the Finetune molecules linked to the keys from the pretrained models. 
+  this will allow for just continuation and running the model to adapt to just the 7k finetuned molecules of interest for HIV...
 """
