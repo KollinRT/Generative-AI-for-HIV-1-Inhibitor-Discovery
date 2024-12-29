@@ -10,6 +10,7 @@ from tokenizers import Tokenizer
 import torch
 from tqdm import tqdm  
 import csv
+from SelfiesDataHandler import NNLossHandler
 
 def load_hyperparameters(path):
     with open(path, 'r') as file:
@@ -58,13 +59,25 @@ def prepare_data(args, key): # TODO: Integrate key into here.... where?
 
 def pretrain_BART(hyperparameters_dict, args, key):
     # TODO: Integrate this into the code!
+
+    # Define the learning hyperparameters
     num_epochs = hyperparameters_dict[key]['TRAIN_EPOCHS']
-    optimizer_selection = hyperparameters_dict[key]['optimizer']
-    criterion_selection = hyperparameters_dict[key]['criterion']
     learning_rate = hyperparameters_dict[key]['LEARNING_RATE']
+    optimizer_selection = hyperparameters_dict[key]['optimizer']
+    # criterion_selection = hyperparameters_dict[key]['criterion']
+
+    # Define early stopping criteria
     early_stopping_toggle = hyperparameters_dict[key]["early_stopping_toggle"]
     early_stopping_threshold = hyperparameters_dict[key]["early_stopping_threshold"]
     early_stopping_patience = hyperparameters_dict[key]["early_stopping_patience"]
+
+    loss_handler = NNLossHandler(
+        loss_name=hyperparameters_dict[key]['criterion'],
+        early_stopping_toggle=early_stopping_toggle,
+        early_stopping_threshold=early_stopping_threshold,
+        early_stopping_patience=early_stopping_patience
+    )
+
 
     # Load the tokenizer and dataset
     tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
@@ -106,26 +119,26 @@ def pretrain_BART(hyperparameters_dict, args, key):
     else:
         raise ValueError(f"Invalid optimizer: {args.optimizer}")
 
-    if criterion_selection == "crossentropy":
-        criterion = torch.nn.CrossEntropyLoss()
-    elif criterion_selection == "nll":
-        criterion = torch.nn.NLLLoss()
-    elif criterion_selection == "poisson":
-        criterion = torch.nn.PoissonNLLLoss()
-    elif criterion_selection == "kldiv":
-        criterion = torch.nn.KLDivLoss()
-    elif criterion_selection == "bce":
-        criterion = torch.nn.BCELoss()
-    elif criterion_selection == "bcewithlogits":
-        criterion = torch.nn.BCEWithLogitsLoss()
-    elif criterion_selection == "marginranking":
-        criterion = torch.nn.MarginRankingLoss()
-    elif criterion_selection == "hingeembedding":
-        criterion = torch.nn.HingeEmbeddingLoss()
-    elif criterion_selection == "multilabelsoftmargin":
-        criterion = torch.nn.MultiLabelSoftMarginLoss()
-    elif criterion_selection == "smoothl1":
-        criterion = torch.nn.SmoothL1Loss()
+    # if criterion_selection == "crossentropy":
+    #     criterion = torch.nn.CrossEntropyLoss()
+    # elif criterion_selection == "nll":
+    #     criterion = torch.nn.NLLLoss()
+    # elif criterion_selection == "poisson":
+    #     criterion = torch.nn.PoissonNLLLoss()
+    # elif criterion_selection == "kldiv":
+    #     criterion = torch.nn.KLDivLoss()
+    # elif criterion_selection == "bce":
+    #     criterion = torch.nn.BCELoss()
+    # elif criterion_selection == "bcewithlogits":
+    #     criterion = torch.nn.BCEWithLogitsLoss()
+    # elif criterion_selection == "marginranking":
+    #     criterion = torch.nn.MarginRankingLoss()
+    # elif criterion_selection == "hingeembedding":
+    #     criterion = torch.nn.HingeEmbeddingLoss()
+    # elif criterion_selection == "multilabelsoftmargin":
+    #     criterion = torch.nn.MultiLabelSoftMarginLoss()
+    # elif criterion_selection == "smoothl1":
+    #     criterion = torch.nn.SmoothL1Loss()
     
     csv_file_path = f'./pretraining_loss_{key}.csv' # TODO: Update file names here!
     with open(csv_file_path, mode='w', newline='') as csv_file:
@@ -145,22 +158,54 @@ def pretrain_BART(hyperparameters_dict, args, key):
         model.train()      # set epoch via hyperparameters... config... THINK ABOUT EARLY STOPPING ALSO!
         for epoch in range(num_epochs):  # Number of epochs
             total_loss = 0
-            for batch in tqdm(pretrain_loader):
+            for batch in tqdm(pretrain_loader): # TODO: Need to do for training and for validation... implement scaffold splitting!q
                 # set somewhere else... look into that...
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
                                                                 # makes sense I think?
-                # Forward pass (assuming self-supervised learning, labels = input_ids)
-                # TODO: Look into the model inputs.... it is just what is established above but should be good...
+                # # Forward pass (assuming self-supervised learning, labels = input_ids)
+                # # TODO: Look into the model inputs.... it is just what is established above but should be good...
+                # outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+                #
+                #
+                # # Compute loss and optimize
+                # loss = outputs.loss
+                # total_loss += loss.item()
+                # optimizer.zero_grad()
+                # loss.backward()
+                # optimizer.step()
+
+                # Forward pass
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
 
+                # # Compute loss using the loss handler
+                # loss = loss_handler.compute_loss(outputs.loss, input_ids)
 
-                # Compute loss and optimize
-                loss = outputs.loss
+                # Extract logits and reshape for CrossEntropyLoss
+                # https://huggingface.co/transformers/v4.4.2/model_doc/bart.html
+                logits = outputs.logits  # Shape: (batch_size, sequence_length, vocab_size)
+                # print(logits)
+                # print(logits.shape)
+                target = input_ids  # Shape: (batch_size, sequence_length)
+
+                # Flatten logits and targets
+                logits = logits.view(-1, logits.size(-1))  # Shape: (batch_size * sequence_length, vocab_size)
+                target = target.view(-1)  # Shape: (batch_size * sequence_length)
+
+                # Compute loss
+                loss = loss_handler.compute_loss(logits, target) # Single scalar return value...
+                # print(loss)
+                # print(loss.shape)
+
                 total_loss += loss.item()
+
+                # Backward pass and optimization
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+
+            # TODO NEW: Need to add the evaluation of validation set! Implement scaffold training and stuffs!
+
             #TODO: DOES THIS LOOK RIGHT?
             # if args.early_stopping == True:
             #   if total_loss < args.early_stopping_threshold: # total_loss is going to get continuously larger?
