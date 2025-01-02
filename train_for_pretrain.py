@@ -11,6 +11,7 @@ import torch
 from tqdm import tqdm  
 import csv
 from SelfiesDataHandler import NNLossHandler
+import os
 
 def load_hyperparameters(path):
     with open(path, 'r') as file:
@@ -83,8 +84,17 @@ def pretrain_BART(hyperparameters_dict, args, key):
     tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
     pretrain_dataset = SelfiesDataset(csv_file=f"./data/trainable_selfies_{key}.csv", tokenizer_path=f"./data/bpe_filter_{key}/bpe.json", mode='pretrain')
 
+    # TODO NEW: Add training and validation set...
+    # TODO NEW: Make it only need to run pretrain once for the whole set. So check if the model file exists and if so throw an error and say model already exists!
+    # This is done in the main portion!
+    # pretrain_train_dataset = SelfiesDataset(csv_file=f"./data/trainable_selfies_{key}.csv", tokenizer_path=f"./data/bpe_filter_{key}/bpe.json", mode='pretrain')
+    # pretrain_val_dataset = SelfiesDataset(csv_file=f"./data/trainable_selfies_{key}.csv", tokenizer_path=f"./data/bpe_filter_{key}/bpe.json", mode='pretrain')
+
     # Create DataLoader
+    # TODO NEW: Get batch_size from the combined_config.yml
     pretrain_loader = DataLoader(pretrain_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
+    # pretrain_val_loader = DataLoader(pretrain_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
+
 
     config = BartConfig(
         vocab_size=tokenizer.get_vocab_size(),  # Set vocab size including special tokens
@@ -140,92 +150,192 @@ def pretrain_BART(hyperparameters_dict, args, key):
     # elif criterion_selection == "smoothl1":
     #     criterion = torch.nn.SmoothL1Loss()
     
-    csv_file_path = f'./pretraining_loss_{key}.csv' # TODO: Update file names here!
+    # csv_file_path = f'./pretraining_loss_{key}.csv' # TODO: Update file names here!
+    # with open(csv_file_path, mode='w', newline='') as csv_file:
+    #     csv_writer = csv.writer(csv_file)
+    #     csv_writer.writerow(['Epoch', 'Loss'])  # Write the header
+    #
+    #
+    #     # Check for CUDA
+    #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #     model.to(device)
+    #
+    #     # Training loop variables initated for early stopping
+    #     best_loss = float('inf')
+    #     patience_counter = 0
+    #
+    #     # Training loop
+    #     model.train()      # set epoch via hyperparameters... config... THINK ABOUT EARLY STOPPING ALSO!
+    #     for epoch in range(num_epochs):  # Number of epochs
+    #         total_loss = 0
+    #         for batch in tqdm(pretrain_loader): # TODO: Need to do for training and for validation... implement scaffold splitting!q
+    #             # set somewhere else... look into that...
+    #             input_ids = batch['input_ids'].to(device)
+    #             attention_mask = batch['attention_mask'].to(device)
+    #                                                             # makes sense I think?
+    #             # # Forward pass (assuming self-supervised learning, labels = input_ids)
+    #             # # TODO: Look into the model inputs.... it is just what is established above but should be good...
+    #             # outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+    #             #
+    #             #
+    #             # # Compute loss and optimize
+    #             # loss = outputs.loss
+    #             # total_loss += loss.item()
+    #             # optimizer.zero_grad()
+    #             # loss.backward()
+    #             # optimizer.step()
+    #
+    #             # Forward pass
+    #             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+    #
+    #             # # Compute loss using the loss handler
+    #             # loss = loss_handler.compute_loss(outputs.loss, input_ids)
+    #
+    #             # Extract logits and reshape for CrossEntropyLoss
+    #             # https://huggingface.co/transformers/v4.4.2/model_doc/bart.html
+    #             logits = outputs.logits  # Shape: (batch_size, sequence_length, vocab_size)
+    #             # print(logits)
+    #             # print(logits.shape)
+    #             target = input_ids  # Shape: (batch_size, sequence_length)
+    #
+    #             # Flatten logits and targets
+    #             logits = logits.view(-1, logits.size(-1))  # Shape: (batch_size * sequence_length, vocab_size)
+    #             target = target.view(-1)  # Shape: (batch_size * sequence_length)
+    #
+    #             # Compute loss
+    #             loss = loss_handler.compute_loss(logits, target) # Single scalar return value...
+    #             # print(loss)
+    #             # print(loss.shape)
+    #
+    #             total_loss += loss.item()
+    #
+    #             # Backward pass and optimization
+    #             optimizer.zero_grad()
+    #             loss.backward()
+    #             optimizer.step()
+    #
+    #         # TODO NEW: Need to add the evaluation of validation set! Implement scaffold training and stuffs!
+    #
+    #         #TODO: DOES THIS LOOK RIGHT?
+    #         # if args.early_stopping == True:
+    #         #   if total_loss < args.early_stopping_threshold: # total_loss is going to get continuously larger?
+    #         #       break
+    #
+    #         # Calculate average loss for the epoch
+    #         avg_loss = total_loss / len(pretrain_loader)
+    #
+    #         # Log the loss every 5 epochs
+    #         if (epoch + 1) % 5 == 0:
+    #             print(f"Epoch {epoch + 1}, Loss: {avg_loss}")
+    #
+    #         # Save the epoch and loss to the CSV file
+    #         csv_writer.writerow([epoch + 1, avg_loss])
+    #         csv_file.flush() # Ensure it writes at the end of each epoch
+    #
+    #         # Early stopping (if enabled)
+    #         if early_stopping_toggle:
+    #             if avg_loss < best_loss:
+    #                 best_loss = avg_loss
+    #                 patience_counter = 0  # Reset patience counter if there's improvement
+    #             else:
+    #                 patience_counter += 1
+    #
+    #             if patience_counter >= early_stopping_patience:
+    #                 print(f"Early stopping triggered after epoch {epoch + 1}")
+    #                 break
+    #
+    #         print(f"Epoch {epoch + 1}, Loss: {avg_loss}") # This may be erased!
+    #
+    #         # Validation loop
+    #         model.eval()
+    #         val_metrics = evaluate_model_on_validation(model, val_set)
+    #         print(f"Epoch {epoch + 1}, Validation Metrics: {val_metrics}")
+    csv_file_path = f'./pretraining_loss_{key}.csv'  # TODO: Update file names here!
     with open(csv_file_path, mode='w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(['Epoch', 'Loss'])  # Write the header
+        csv_writer.writerow(['Epoch', 'Train Loss', 'Validation Loss'])  # Write the header
 
-    
         # Check for CUDA
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
 
-        # Training loop variables initated for early stopping
+        # Training loop variables initiated for early stopping
         best_loss = float('inf')
         patience_counter = 0
 
         # Training loop
-        model.train()      # set epoch via hyperparameters... config... THINK ABOUT EARLY STOPPING ALSO!
+        model.train()  # set epoch via hyperparameters... config... THINK ABOUT EARLY STOPPING ALSO!
         for epoch in range(num_epochs):  # Number of epochs
-            total_loss = 0
-            for batch in tqdm(pretrain_loader): # TODO: Need to do for training and for validation... implement scaffold splitting!q
-                # set somewhere else... look into that...
+            total_train_loss = 0
+
+            # Training loop
+            model.train()
+            for batch in tqdm(pretrain_loader):  # Training data
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
-                                                                # makes sense I think?
-                # # Forward pass (assuming self-supervised learning, labels = input_ids)
-                # # TODO: Look into the model inputs.... it is just what is established above but should be good...
-                # outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
-                #
-                #
-                # # Compute loss and optimize
-                # loss = outputs.loss
-                # total_loss += loss.item()
-                # optimizer.zero_grad()
-                # loss.backward()
-                # optimizer.step()
 
                 # Forward pass
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
 
-                # # Compute loss using the loss handler
-                # loss = loss_handler.compute_loss(outputs.loss, input_ids)
-
                 # Extract logits and reshape for CrossEntropyLoss
-                # https://huggingface.co/transformers/v4.4.2/model_doc/bart.html
-                logits = outputs.logits  # Shape: (batch_size, sequence_length, vocab_size)
-                # print(logits)
-                # print(logits.shape)
-                target = input_ids  # Shape: (batch_size, sequence_length)
+                logits = outputs.logits
+                target = input_ids
 
                 # Flatten logits and targets
-                logits = logits.view(-1, logits.size(-1))  # Shape: (batch_size * sequence_length, vocab_size)
-                target = target.view(-1)  # Shape: (batch_size * sequence_length)
+                logits = logits.view(-1, logits.size(-1))
+                target = target.view(-1)
 
                 # Compute loss
-                loss = loss_handler.compute_loss(logits, target) # Single scalar return value...
-                # print(loss)
-                # print(loss.shape)
+                loss = loss_handler.compute_loss(logits, target)
 
-                total_loss += loss.item()
+                total_train_loss += loss.item()
 
                 # Backward pass and optimization
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
-            # TODO NEW: Need to add the evaluation of validation set! Implement scaffold training and stuffs!
+            # Calculate average training loss for the epoch
+            avg_train_loss = total_train_loss / len(pretrain_loader)
 
-            #TODO: DOES THIS LOOK RIGHT?
-            # if args.early_stopping == True:
-            #   if total_loss < args.early_stopping_threshold: # total_loss is going to get continuously larger?
-            #       break
+            # Validation loop
+            total_val_loss = 0
+            model.eval()  # Set model to evaluation mode
+            with torch.no_grad():
+                for batch in tqdm(val_loader):  # Validation data
+                    input_ids = batch['input_ids'].to(device)
+                    attention_mask = batch['attention_mask'].to(device)
 
-            # Calculate average loss for the epoch
-            avg_loss = total_loss / len(pretrain_loader)
+                    # Forward pass
+                    outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
 
-            # Log the loss every 5 epochs
-            if (epoch + 1) % 5 == 0:
-                print(f"Epoch {epoch + 1}, Loss: {avg_loss}")
+                    # Extract logits and reshape for CrossEntropyLoss
+                    logits = outputs.logits
+                    target = input_ids
 
-            # Save the epoch and loss to the CSV file
-            csv_writer.writerow([epoch + 1, avg_loss])
-            csv_file.flush() # Ensure it writes at the end of each epoch
+                    # Flatten logits and targets
+                    logits = logits.view(-1, logits.size(-1))
+                    target = target.view(-1)
+
+                    # Compute loss
+                    val_loss = loss_handler.compute_loss(logits, target)
+
+                    total_val_loss += val_loss.item()
+
+            # Calculate average validation loss for the epoch
+            avg_val_loss = total_val_loss / len(val_loader)
+
+            # Log the losses
+            print(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Validation Loss: {avg_val_loss}")
+
+            # Save the epoch and losses to the CSV file
+            csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss])
+            csv_file.flush()  # Ensure it writes at the end of each epoch
 
             # Early stopping (if enabled)
             if early_stopping_toggle:
-                if avg_loss < best_loss:
-                    best_loss = avg_loss
+                if avg_val_loss < best_loss:
+                    best_loss = avg_val_loss
                     patience_counter = 0  # Reset patience counter if there's improvement
                 else:
                     patience_counter += 1
@@ -234,10 +344,8 @@ def pretrain_BART(hyperparameters_dict, args, key):
                     print(f"Early stopping triggered after epoch {epoch + 1}")
                     break
 
-            print(f"Epoch {epoch + 1}, Loss: {avg_loss}") # This may be erased!
-
         # Save the model                # TODO: this is replaced by the model key name...
-        torch.save(model.state_dict(), f'./selfies_BART_pretrained_{key}.pth')
+        torch.save(model.state_dict(), f'./selfies_BART_pretrained_{key}.pth') # TODO: This is the trained model name... Check to see if this exists at the start of the function and if so print that then skip!
         # model.state_dict() or what else?
 
 
@@ -255,19 +363,23 @@ def main():
     print("BART hyperparameters:", bart_hyperparameters)
     
     for key in bart_hyperparameters.keys():
-        # Update paths based on the current key
-        args.smiles_dataset=f"model_name_{key}.csv"
-        print(args.smiles_dataset)
-        args.selfies_dataset = f"./data/molecule_data_{key}.csv" # This is the prepared data path...
-        # args.prepared_data_path = f"./data/{key}_prepared_data.txt"
-        args.prepared_data_path = f"./data/prepared_selfies_{key}.txt"
-        args.bpe_path = f"./data/bpe_filter_{key}/"
-                
-        # Prepare data
-        prepare_data(args, key)
+        if os.path.exists(f'./selfies_BART_pretrained_{key}.pth'): # TODO NEW: Maybe change this to a single file name. If I am not passing in a key name, why care for this? Only need to pretrain one model! ALL!
+        # TODO NEW: Does this get passed into someone in the train_for_finetune that we use all the same only file? I think this is done already!
+            print("Model already exists! No need to retrain")
+        else:
+            # Update paths based on the current key
+            args.smiles_dataset=f"model_name_{key}.csv"
+            print(args.smiles_dataset)
+            args.selfies_dataset = f"./data/molecule_data_{key}.csv" # This is the prepared data path...
+            # args.prepared_data_path = f"./data/{key}_prepared_data.txt"
+            args.prepared_data_path = f"./data/prepared_selfies_{key}.txt"
+            args.bpe_path = f"./data/bpe_filter_{key}/"
 
-        # Train model
-        pretrain_BART(bart_hyperparameters, args, key)
+            # Prepare data
+            prepare_data(args, key)
+
+            # Train model
+            pretrain_BART(bart_hyperparameters, args, key)
 
 if __name__ == "__main__":
     main()

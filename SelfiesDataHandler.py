@@ -651,3 +651,93 @@ class NNLossHandler:
 # """
 #
 # """
+
+
+# # TODO: EARLY STOPPING BEST PRACTICES
+# # Initialize variables for early stopping
+# best_loss = float('inf')  # Lowest validation loss seen so far
+# patience_counter = 0      # Counter for early stopping
+# best_model_path = './best_model_weights.pth'  # File to save best model weights
+#
+# # Training loop
+# for epoch in range(num_epochs):
+#     model.train()
+#     total_train_loss = 0
+#
+#     # Training phase
+#     for batch in tqdm(pretrain_loader):
+#         input_ids = batch['input_ids'].to(device)
+#         attention_mask = batch['attention_mask'].to(device)
+#
+#         # Forward pass
+#         outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+#
+#         # Compute loss
+#         logits = outputs.logits.view(-1, outputs.logits.size(-1))
+#         target = input_ids.view(-1)
+#         loss = loss_handler.compute_loss(logits, target)
+#
+#         total_train_loss += loss.item()
+#
+#         # Backward pass and optimization
+#         optimizer.zero_grad()
+#         loss.backward()
+#         optimizer.step()
+#
+#     avg_train_loss = total_train_loss / len(pretrain_loader)
+#
+#     # Validation phase
+#     model.eval()
+#     total_val_loss = 0
+#     with torch.no_grad():
+#         for batch in val_loader:
+#             input_ids = batch['input_ids'].to(device)
+#             attention_mask = batch['attention_mask'].to(device)
+#
+#             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+#             logits = outputs.logits.view(-1, outputs.logits.size(-1))
+#             target = input_ids.view(-1)
+#             val_loss = loss_handler.compute_loss(logits, target)
+#             total_val_loss += val_loss.item()
+#
+#     avg_val_loss = total_val_loss / len(val_loader)
+#     print(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Validation Loss: {avg_val_loss}")
+#
+#     # Early stopping and saving best weights
+#     if avg_val_loss < best_loss:
+#         best_loss = avg_val_loss
+#         patience_counter = 0
+#         torch.save(model.state_dict(), best_model_path)  # Save best weights
+#         print(f"New best model saved with Validation Loss: {best_loss}")
+#     else:
+#         patience_counter += 1
+#
+#     if patience_counter >= early_stopping_patience:
+#         print("Early stopping triggered!")
+#         break
+
+# LOAD THE BEST WEIGHTS
+# Load the best model weights
+# model.load_state_dict(torch.load(best_model_path))
+# print("Best model weights loaded for testing.")
+
+# Testing After Early Stopping (IF I AM USING TESTING?)
+# model.eval()  # Set to evaluation mode
+# total_test_loss = 0
+# test_metrics = {}
+#
+# with torch.no_grad():
+#     for batch in tqdm(test_loader):
+#         input_ids = batch['input_ids'].to(device)
+#         attention_mask = batch['attention_mask'].to(device)
+#
+#         outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+#         logits = outputs.logits.view(-1, outputs.logits.size(-1))
+#         target = input_ids.view(-1)
+#         test_loss = loss_handler.compute_loss(logits, target)
+#
+#         total_test_loss += test_loss.item()
+#
+# avg_test_loss = total_test_loss / len(test_loader)
+# print(f"Test Loss: {avg_test_loss}")
+#
