@@ -19,6 +19,7 @@ CLEANUP!
 """
 
 import torch
+from debugpy.launcher import output
 from tokenizers import Tokenizer
 from transformers import BartForConditionalGeneration
 
@@ -115,6 +116,25 @@ def generate_text(model, tokenizer, input_text, max_length=50, num_return_sequen
     ]
     return generated_texts
 
+def benchmark_generated_molecules():
+    """
+    Generate molecules using the model and tokenizer.
+    This should include novelty and uniqueness
+    Utilize the training set...
+    - _{key} will be utilized from ./data/ folder
+    - how are we marking train vs validation? This should be the same...
+    - Get the code here...
+
+    formula for novelty:
+        - here
+    formula for uniqueness:
+        - here
+
+    """
+    pass
+
+# TODO: NEW include sampling...
+
 # if __name__ == "__main__":
 #     # Specify the paths to the model and tokenizer
 #     model_path = './selfies_BART_druglike_fine_tuned.pth'
@@ -173,6 +193,11 @@ if __name__ == "__main__":
     # Specify the paths to the model and tokenizer
     model_path = f'./selfies_BART_finetuned_{key}.pth'  # Path to the saved state dictionary
     tokenizer_path = 'facebook/bart-base'  # Use the pre-trained tokenizer from Hugging Face
+    # TODO: New, update the tokenizer_path above!
+    """
+    #     tokenizer_path = './data/bpe/bpe.json'
+    Something like that above.... data _{key} yeah...
+    """
 
     # Set the device to use (either 'cuda' or 'cpu')
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -182,7 +207,7 @@ if __name__ == "__main__":
     tokenizer = load_tokenizer(tokenizer_path)
 
     # Input text for generation
-    input_text = "[C][S][Br]"
+    input_text = "[C][S][Br]" # Is this utilized? I do not see it!
 
     # Generate text
     generated_texts = generate_text(model,

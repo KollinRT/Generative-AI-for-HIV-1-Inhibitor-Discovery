@@ -95,6 +95,10 @@ def pretrain_BART(hyperparameters_dict, args, key):
     pretrain_loader = DataLoader(pretrain_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
     # pretrain_val_loader = DataLoader(pretrain_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
 
+    # TODO: NEW: If I already have the pretrain train-val split, do I have to redo it?
+    # I think just load it in and take the 90% length and do train_dataset[0:90%] val_dataset[90%+1:] then I can just do
+    # it like that? But I have a SelfiesDataset class that has mode = 'pretrain', I think that I can just incorporate the
+    # above logic into that? How would it be split though into two sets?
 
     config = BartConfig(
         vocab_size=tokenizer.get_vocab_size(),  # Set vocab size including special tokens
@@ -324,6 +328,8 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
             # Calculate average validation loss for the epoch
             avg_val_loss = total_val_loss / len(val_loader)
+
+            # TODO: Add PPL perplexity
 
             # Log the losses
             print(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Validation Loss: {avg_val_loss}")

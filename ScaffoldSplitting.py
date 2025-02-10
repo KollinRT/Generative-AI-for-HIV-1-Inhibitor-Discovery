@@ -171,7 +171,67 @@ drugs = [
 for drug in drugs:
     print(extract_scaffold_from_selfies(drug))
 
+# def editDistRec(s1, s2, m, n):
+#     # If first string is empty, the only option is to
+#     # insert all characters of second string into first
+#     if m == 0:
+#         return n
+#
+#     # If second string is empty, the only option is to
+#     # remove all characters of first string
+#     if n == 0:
+#         return m
+#
+#     # If last characters of two strings are same, nothing
+#     # much to do. Get the count for
+#     # remaining strings.
+#     if s1[m - 1] == s2[n - 1]:
+#         return editDistRec(s1, s2, m - 1, n - 1)
+#
+#     # If last characters are not same, consider all three
+#     # operations on last character of first string,
+#     # recursively compute minimum cost for all three
+#     # operations and take minimum of three values.
+#     return 1 + min(editDistRec(s1, s2, m, n - 1),    # Insert
+#                    editDistRec(s1, s2, m - 1, n),    # Remove
+#                    editDistRec(s1, s2, m - 1, n - 1) # Replace
+#                    )
+#
+# def editDist(s1, s2):
+#     return editDistRec(s1, s2, len(s1), len(s2))
+
+def edit_dist(s1, s2):
+    m, n = len(s1), len(s2)
+    prev = 0  # Stores dp[i-1][j-1]
+    curr = list(range(n + 1))  # Stores dp[i][j-1] and dp[i][j]
+
+    for i in range(1, m + 1):
+        prev = curr[0]
+        curr[0] = i
+        for j in range(1, n + 1):
+            temp = curr[j]
+            if s1[i - 1] == s2[j - 1]:
+                curr[j] = prev
+            else:
+                curr[j] = 1 + min(curr[j - 1], prev, curr[j])
+            prev = temp
+    return curr[n]
+
+
+string1 = "O=C(NCCNc1ncccn1)Nc1ccccc1"
+string2 = "c1cc(CC2CCOC2)ccn1"
+
+print(edit_dist(string1, string2))
+
 #TODO: 01/01/2025:
 """
 - Get some scaffolds and then calculate the word difference values?
+"""
+
+# TODO: 01/08/2025
+"""
+- Think of how to do scaffold levels...
+- granularity... think of the paper!
+- Try to do a SOM cluster of the 940k molecules? See the space?
+- - Quantify edit distance as the metric for similarity?
 """
