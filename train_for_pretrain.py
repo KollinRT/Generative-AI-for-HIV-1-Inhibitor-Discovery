@@ -117,8 +117,8 @@ def pretrain_BART(hyperparameters_dict, args, key):
     """
 
     df = pd.read_csv(
-        f"/media/kollin/WindowsSecondary/ThesisBU/Thesis/WIP_Thesis/molecule_with_clusters_lsh_256perm.csv")
-    df = df.sort_values(by=['Cluster'])
+        f"./data/trainable_selfies_{key}.csv")
+    df = df.sort_values(by=['Cluster']) # TODO: NEW need to add clustering here... So this needs to be down with the fingerprinting work...
     mol_count = int(len(df) * 0.9)
     # print(int(len(df)/10))
 
