@@ -92,13 +92,42 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
     # Create DataLoader
     # TODO NEW: Get batch_size from the combined_config.yml
-    pretrain_loader = DataLoader(pretrain_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
+    # pretrain_loader = DataLoader(pretrain_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
     # pretrain_val_loader = DataLoader(pretrain_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
 
     # TODO: NEW: If I already have the pretrain train-val split, do I have to redo it?
     # I think just load it in and take the 90% length and do train_dataset[0:90%] val_dataset[90%+1:] then I can just do
     # it like that? But I have a SelfiesDataset class that has mode = 'pretrain', I think that I can just incorporate the
     # above logic into that? How would it be split though into two sets?
+    """
+    This would be something such as
+    df = pd.read_csv(f"/media/kollin/WindowsSecondary/ThesisBU/Thesis/WIP_Thesis/molecule_with_clusters_lsh_256perm.csv")
+    df = df.sort_values(by=['Cluster'])
+    mol_count = int(len(df)*0.9)
+    # print(int(len(df)/10))
+
+    # Then we need to sort it by clusterID and grab the lowest...
+    
+    train = df[:mol_count] # 90%
+    valid = df[mol_count:] # 10%
+    pretrain_loader = DataLoader(train, batch_size=16, shuffle=True, collate_fn=collate_fn)
+    valid_loader = DataLoader(valid, batch_size=16, shuffle=True, collate_fn=collate_fn)
+    
+    This should work for both parts of the training loop I think! Just have the two loops for training and validation.
+    """
+
+    df = pd.read_csv(
+        f"/media/kollin/WindowsSecondary/ThesisBU/Thesis/WIP_Thesis/molecule_with_clusters_lsh_256perm.csv")
+    df = df.sort_values(by=['Cluster'])
+    mol_count = int(len(df) * 0.9)
+    # print(int(len(df)/10))
+
+    # Then we need to sort it by clusterID and grab the lowest...
+
+    train = df[:mol_count]  # 90% train
+    valid = df[mol_count:]  # 10% val
+    pretrain_loader = DataLoader(train, batch_size=16, shuffle=True, collate_fn=collate_fn)
+    val_loader = DataLoader(valid, batch_size=16, shuffle=True, collate_fn=collate_fn)
 
     config = BartConfig(
         vocab_size=tokenizer.get_vocab_size(),  # Set vocab size including special tokens
