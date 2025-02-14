@@ -197,79 +197,102 @@ def selfies_to_mol(selfies_string):
     smiles = sf.decoder(selfies_string)  # Decode SELFIES to SMILES
     return Chem.MolFromSmiles(smiles)  # Convert SMILES to RDKit molecule
 
-
-# Load dataset
-df = pd.read_csv("/media/kollin/WindowsSecondary/ThesisBU/Thesis/WIP_Thesis/data/molecule_data_model_nada.csv")
-
-# Convert SELFIES to RDKit Molecule
-df['Molecule'] = df['selfies'].apply(selfies_to_mol)
-
-# Remove invalid molecules
-df = df[df['Molecule'].notnull()]
-
-# Define fingerprint parameters
-fp_radius = 2  # Morgan radius (ECFP4 uses diameter=4 → radius=2)
-fp_size = 2048  # Standard fingerprint size
-
-# Convert fingerprints to NumPy arrays
-fingerprints = []
-for mol in df['Molecule']:
-    fp = AllChem.GetMorganFingerprintAsBitVect(mol, fp_radius, nBits=fp_size)
-    arr = np.zeros((fp_size,), dtype=np.uint8)
-    DataStructs.ConvertToNumpyArray(fp, arr)  # Efficiently convert to NumPy
-    fingerprints.append(arr)
-
-# Stack fingerprints into a single NumPy array
-fingerprint_matrix = np.vstack(fingerprints)
-print(f"Shape of fingerprint matrix: {fingerprint_matrix.shape}")
-
-
-# Define function for Butina clustering with batch processing
-def butina_clustering(fingerprints, threshold=0.7, batch_size=50000):
+# TODO: Convert to fingerprints
+def make_fingerprint_thisthat(df):
     """
-    Perform Butina clustering using batch processing.
+    @param df:
+    # @param key:
 
-    Args:
-    - fingerprints: NumPy array of Morgan fingerprints.
-    - threshold: Tanimoto similarity threshold for clustering.
-    - batch_size: Number of molecules processed per batch.
-
-    Returns:
-    - List of clusters, where each cluster is a list of indices.
+    return:
     """
-    n_fps = len(fingerprints)
-    clusters = []
+    # Load dataset
+    # df = pd.read_csv(f"/media/kollin/WindowsSecondary/ThesisBU/Thesis/WIP_Thesis/data/molecule_data_model_{key}.csv")
+    # Convert SELFIES to RDKit Molecule
+    df['Molecule'] = df['selfies'].apply(selfies_to_mol)
 
-    for start_idx in range(0, n_fps, batch_size):
-        end_idx = min(start_idx + batch_size, n_fps)
-        dists = []
+    # Remove invalid molecules
+    df = df[df['Molecule'].notnull()]
 
-        # Compute Tanimoto similarity for the batch
-        for i in range(start_idx + 1, end_idx):
-            sims = [1 - TanimotoSimilarity(DataStructs.CreateFromBitString("".join(map(str, fingerprints[i]))),
-                                           DataStructs.CreateFromBitString("".join(map(str, fingerprints[j]))))
-                    for j in range(start_idx, i)]
-            dists.extend(sims)
+    # Define fingerprint parameters
+    fp_radius = 2  # Morgan radius (ECFP4 uses diameter=4 → radius=2)
+    fp_size = 2048  # Standard fingerprint size
 
-        # Cluster the current batch
-        batch_clusters = Butina.ClusterData(dists, end_idx - start_idx, threshold, isDistData=True)
-        clusters.extend(batch_clusters)
+    # Convert fingerprints to NumPy arrays
+    fingerprints = []
+    for mol in df['Molecule']:
+        fp = AllChem.GetMorganFingerprintAsBitVect(mol, fp_radius, nBits=fp_size)
+        arr = np.zeros((fp_size,), dtype=np.uint8)
+        DataStructs.ConvertToNumpyArray(fp, arr)  # Efficiently convert to NumPy
+        fingerprints.append(arr)
 
-    return clusters
+    # Add fingerprints to df
+    df['Fingerprint'] = fingerprints
+
+    print("columns in thisthat")
+    print(df.columns)
+
+    # Stack fingerprints into a single NumPy array
+    fingerprint_matrix = np.vstack(fingerprints)
+    print(f"Shape of fingerprint matrix: {fingerprint_matrix.shape}")
+
+    # TODO: NEW this doesn't give the Clusters...
+
+    return df
+
+
+# # Define function for Butina clustering with batch processing
+# def butina_clustering(fingerprints, threshold=0.7, batch_size=50000):
+#     """
+#     Perform Butina clustering using batch processing.
+#
+#     Args:
+#     - fingerprints: NumPy array of Morgan fingerprints.
+#     - threshold: Tanimoto similarity threshold for clustering.
+#     - batch_size: Number of molecules processed per batch.
+#
+#     Returns:
+#     - List of clusters, where each cluster is a list of indices.
+#     """
+#     n_fps = len(fingerprints)
+#     clusters = []
+#
+#     for start_idx in range(0, n_fps, batch_size):
+#         end_idx = min(start_idx + batch_size, n_fps)
+#         dists = []
+#
+#         # Compute Tanimoto similarity for the batch
+#         for i in range(start_idx + 1, end_idx):
+#             sims = [1 - TanimotoSimilarity(DataStructs.CreateFromBitString("".join(map(str, fingerprints[i]))),
+#                                            DataStructs.CreateFromBitString("".join(map(str, fingerprints[j]))))
+#                     for j in range(start_idx, i)]
+#             dists.extend(sims)
+#
+#         # Cluster the current batch
+#         batch_clusters = Butina.ClusterData(dists, end_idx - start_idx, threshold, isDistData=True)
+#         clusters.extend(batch_clusters)
+#
+#     return clusters
 
 
 # Perform clustering with batch processing
-clusters = butina_clustering(fingerprint_matrix, threshold=0.7, batch_size=50000)
+# clusters = butina_clustering(fingerprint_matrix, threshold=0.7, batch_size=50000)
 
-# Assign cluster IDs to the molecules in DataFrame
-df['ClusterID'] = -1  # Initialize with -1
-for cluster_id, cluster in enumerate(clusters):
-    for molecule_index in cluster:
-        df.at[molecule_index, 'ClusterID'] = cluster_id
+# # Assign cluster IDs to the molecules in DataFrame
+# df['ClusterID'] = -1  # Initialize with -1
+# for cluster_id, cluster in enumerate(clusters):
+#     for molecule_index in cluster:
+#         df.at[molecule_index, 'ClusterID'] = cluster_id
+#
+# # Save clustered data
+# output_path_with_clusters = "./saved_ecfp4_mols_with_clusters_nada.csv"
+# df.to_csv(output_path_with_clusters, index=False)
 
-# Save clustered data
-output_path_with_clusters = "./saved_ecfp4_mols_with_clusters_nada.csv"
-df.to_csv(output_path_with_clusters, index=False)
+# print(f"Clustered data saved to {output_path_with_clusters}")
+# print(df.head())
 
-print(f"Clustered data saved to {output_path_with_clusters}")
-print(df.head())
+
+df = pd.read_csv(f"./data/trainable_selfies_model_lipinski.csv")
+
+fp = make_fingerprint_thisthat(df)
+
+print(fp)

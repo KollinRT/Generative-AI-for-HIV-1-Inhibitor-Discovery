@@ -104,6 +104,13 @@ To run this pretraining we use
 python3 train_for_pretrain.py --yaml="./PretrainSpecs.yml"
 ```
 
+```python3
+python3 train_for_pretrain.py --hyperparameters_path="./PretrainSpecs.yml"
+```
+
+```bash
+python3 train_for_pretrain.py --hyperparameters_path="./combined_config.yml"
+```
 
 Going to have to add logging information for loss to create a graph for each epoch or every 5 epoch logged into a .csv file that I can graph at the end...
 - - Maybe even have it create the graphs at the end of each go around and make it be pretrain and even save the config info for each model... that way it allows for easy replicability!

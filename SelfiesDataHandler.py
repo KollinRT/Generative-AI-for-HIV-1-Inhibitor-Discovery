@@ -192,7 +192,17 @@ from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 from tokenizers import Tokenizer
 
-def collate_fn(batch):
+def collate_fn_pre(batch):
+    # Pretraining mode: items only have 'input_ids'
+    input_ids = pad_sequence([item['input_ids'] for item in batch], batch_first=True, padding_value=0)
+    attention_mask = (input_ids != 0).long()  # Create attention mask (1 for tokens, 0 for padding)
+    return {
+        'input_ids': input_ids,
+        'attention_mask': attention_mask
+    }
+
+
+def collate_fn_fine(batch):
     if isinstance(batch[0], dict):
         # Fine-tuning mode
         input_ids = pad_sequence([item['input_ids'] for item in batch], batch_first=True, padding_value=0)
@@ -226,20 +236,34 @@ class SelfiesDataset(Dataset):
         """Return the total number of entries in the dataset."""
         return len(self.data)
 
+    # def __getitem__(self, idx):
+    #     """Retrieve an item by index."""
+    #     #print(f"Columns are: {self.data.columns}") # DEBUG
+    #
+    #     selfies_string = self.data.iloc[idx]['selfies']  # Update this if the column name is different
+    #     encoded = self.tokenizer.encode(selfies_string)
+    #
+    #     if self.mode == 'pretrain':
+    #         return torch.tensor(encoded.ids, dtype=torch.long)
+    #     elif self.mode == 'finetune':
+    #         IC50 = self.data.iloc[idx]['IC50']
+    #         inhibition_site = self.data.iloc[idx]['site_name']
+    #         inhibition_encoded = self.encode_inhibition_site(inhibition_site)
+    #
+    #         return {
+    #             'input_ids': torch.tensor(encoded.ids, dtype=torch.long),
+    #             'IC50': torch.tensor([IC50], dtype=torch.float),
+    #             'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
+    #         }
     def __getitem__(self, idx):
-        """Retrieve an item by index."""
-        #print(f"Columns are: {self.data.columns}") # DEBUG
-
-        selfies_string = self.data.iloc[idx]['selfies']  # Update this if the column name is different
+        selfies_string = self.data.iloc[idx]['selfies']
         encoded = self.tokenizer.encode(selfies_string)
-
         if self.mode == 'pretrain':
-            return torch.tensor(encoded.ids, dtype=torch.long)
+            return {'input_ids': torch.tensor(encoded.ids, dtype=torch.long)}
         elif self.mode == 'finetune':
             IC50 = self.data.iloc[idx]['IC50']
             inhibition_site = self.data.iloc[idx]['site_name']
             inhibition_encoded = self.encode_inhibition_site(inhibition_site)
-
             return {
                 'input_ids': torch.tensor(encoded.ids, dtype=torch.long),
                 'IC50': torch.tensor([IC50], dtype=torch.float),
@@ -269,6 +293,66 @@ class SelfiesTokenizer:
         symbols = [self.inv_vocab[id] for id in token_ids if id in self.inv_vocab]
         selfies_string = "".join(symbols)
         return selfies_string.replace("<start>", "").replace("<end>", "").replace("<pad>", "")
+
+class ClusteredSelfiesDataset(Dataset):
+    def __init__(self, df, tokenizer, mode='pretrain'):
+        """
+        Initializes the dataset with a clustered DataFrame and a tokenizer.
+
+        Args:
+            df (pandas.DataFrame): DataFrame containing at least a 'selfies' column.
+                                     (It may also contain additional columns like 'Cluster'.)
+            tokenizer: A tokenizer instance with an .encode() method.
+            mode (str): Either 'pretrain' or 'finetune'. In 'finetune' mode, additional columns
+                        (e.g., 'IC50' and 'site_name') are expected.
+        """
+        # Reset index to ensure integer indexing (0, 1, 2, ...)
+        self.df = df.reset_index(drop=True)
+        self.tokenizer = tokenizer
+        self.mode = mode
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, idx):
+        # Use .iloc to ensure row-based access.
+        row = self.df.iloc[idx]
+        selfies_string = row['selfies']
+        encoded = self.tokenizer.encode(selfies_string)
+
+        if self.mode == 'pretrain':
+            return {'input_ids': torch.tensor(encoded.ids, dtype=torch.long)}
+        elif self.mode == 'finetune':
+            # Expect additional columns for fine-tuning.
+            IC50 = row.get('IC50', 0)  # default value if missing
+            inhibition_site = row.get('site_name', "")
+            inhibition_encoded = self.encode_inhibition_site(inhibition_site)
+            return {
+                'input_ids': torch.tensor(encoded.ids, dtype=torch.long),
+                'IC50': torch.tensor([IC50], dtype=torch.float),
+                'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
+            }
+        else:
+            raise ValueError(f"Invalid mode: {self.mode}")
+
+    def encode_inhibition_site(self, inhibition_site):
+        """
+        Encodes the inhibition site string into a numerical label.
+
+        Args:
+            inhibition_site (str): The inhibition site string.
+
+        Returns:
+            int: 0 if the string contains 'RVP', 1 if it contains 'RVE', otherwise -1.
+        """
+        inhibition_site = inhibition_site.strip().upper()
+        if 'RVP' in inhibition_site:
+            return 0
+        elif 'RVE' in inhibition_site:
+            return 1
+        return -1
+
+
 
 def mutate_selfies(selfies_string, mutation_rate=0.1):
     symbols = sf.split_selfies(selfies_string)  # Split the SELFIES into individual symbols
