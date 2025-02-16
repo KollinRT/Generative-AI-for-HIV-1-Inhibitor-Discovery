@@ -382,7 +382,7 @@ def filter_properties(properties_df, model_name, filters):
     print(f"Filtered data saved to {filename}")
 
 
-model_hyperparams = data['molecular_properties_to_filter']
+model_hyperparams = data['molecular_properties_to_filter'] # PretrainSpecs.yml
  
 # Load the initial DataFrame
 non_filter = pd.read_csv("./vocab_smiles_data_TEST_properties.csv")

@@ -118,3 +118,46 @@ Going to have to add logging information for loss to create a graph for each epo
 
 ## In training loop
 Need to add epoch % 5 == 0, log info on loss and epoch no...
+
+
+### Logical execution
+#### 1. Get the data
+utilize the file
+`getDataForPretrain.yml` 
+```bash
+python3 getDataForPretrain.py --yaml="/media/kollin/WindowsSecondary1/ThesisBU/Thesis/WIP_Thesis/PretrainSpecs.yml"
+```
+gets you going to generate the files. This can then be fed into the next step.
+
+#### 2. Generate the combined_config file
+utilize the file
+`train_for_pretrain.py`
+
+[//]: # (```bash)
+
+[//]: # (python3 train_for_pretrain.py --hyperparameters_path="./combined_config.yml")
+
+[//]: # (```)
+
+```bash
+python3 MakeDefaultHyperparams.py 
+Combined configuration saved to combined_config.yml
+```
+But first you have to generate the data for the `./combined_config.yml` file.
+This is in the 
+`MakeDefaultHyperparams.py` 
+file along with the default hyperparams config.
+Run it then generate the `./combined_config.yml`
+
+#### 3a. Generate the fingerprints and the clusters.
+The fingerprints for the models can be generated with
+
+#### 3b. Train the pre-train model
+utilize the file
+`train_for_pretrain.py`
+This will work with the `./combined_config.yml` file.
+
+```bash
+python3 train_for_pretrain.py --hyperparameters_path="./combined_config.yml"
+```
+This will perform clustering 
