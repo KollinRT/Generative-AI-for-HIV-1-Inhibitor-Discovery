@@ -141,7 +141,7 @@ utilize the file
 
 ```bash
 python3 MakeDefaultHyperparams.py 
-Combined configuration saved to combined_config.yml
+> Combined configuration saved to combined_config.yml
 ```
 But first you have to generate the data for the `./combined_config.yml` file.
 This is in the 
@@ -150,14 +150,35 @@ file along with the default hyperparams config.
 Run it then generate the `./combined_config.yml`
 
 #### 3a. Generate the fingerprints and the clusters.
-The fingerprints for the models can be generated with
+The fingerprints for the models can be generated with the
+`generateClusters.py` and `generateFingerprints.py`
+files. These may be incorporated into the `train_for_pretrain.py` file, but still would have to get it working, as it is not currently but works independently...  
+**TODO**:
+- [ ] Get the standalone files to work well and consistently and document the process.
+    - [ ] Get this implemented into the current logic and not standalone?
+
+This will perform the clustering that will interplay with the `ClusteredSelfiesDataset` class in `train_for_pretrain.py`.
+This will add the fingerprints and cluster columns into the df (csv) file that will be utilized to help select the most likely singleton drugs for use in validation splitting.
+- should be one-offs, I hope? The last clusterIDs are lower in total count?
+
 
 #### 3b. Train the pre-train model
 utilize the file
 `train_for_pretrain.py`
-This will work with the `./combined_config.yml` file.
+This will work with the `./combined_config.yml` file since it needs the hyperparameters.  
+
 
 ```bash
 python3 train_for_pretrain.py --hyperparameters_path="./combined_config.yml"
 ```
-This will perform clustering 
+This will train the model with the SELFIES text.
+
+
+##### Tech Specs
+Intel Core i9-13900KF Processor (24 core (8P/16E)/32 Threads)  
+128 GB RAM 4800 MHz  
+RTX 4090 24GB VRAM  
+
+
+
+

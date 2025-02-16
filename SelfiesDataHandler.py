@@ -322,35 +322,37 @@ class ClusteredSelfiesDataset(Dataset):
 
         if self.mode == 'pretrain':
             return {'input_ids': torch.tensor(encoded.ids, dtype=torch.long)}
-        elif self.mode == 'finetune':
-            # Expect additional columns for fine-tuning.
-            IC50 = row.get('IC50', 0)  # default value if missing
-            inhibition_site = row.get('site_name', "")
-            inhibition_encoded = self.encode_inhibition_site(inhibition_site)
-            return {
-                'input_ids': torch.tensor(encoded.ids, dtype=torch.long),
-                'IC50': torch.tensor([IC50], dtype=torch.float),
-                'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
-            }
+# no finetune mode in this pretrain only portion...
+        # elif self.mode == 'finetune':
+        #     # Expect additional columns for fine-tuning.
+        #     IC50 = row.get('IC50', 0)  # default value if missing
+        #     inhibition_site = row.get('site_name', "")
+        #     inhibition_encoded = self.encode_inhibition_site(inhibition_site)
+        #     return {
+        #         'input_ids': torch.tensor(encoded.ids, dtype=torch.long),
+        #         'IC50': torch.tensor([IC50], dtype=torch.float),
+        #         'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
+        #     }
         else:
             raise ValueError(f"Invalid mode: {self.mode}")
 
-    def encode_inhibition_site(self, inhibition_site):
-        """
-        Encodes the inhibition site string into a numerical label.
-
-        Args:
-            inhibition_site (str): The inhibition site string.
-
-        Returns:
-            int: 0 if the string contains 'RVP', 1 if it contains 'RVE', otherwise -1.
-        """
-        inhibition_site = inhibition_site.strip().upper()
-        if 'RVP' in inhibition_site:
-            return 0
-        elif 'RVE' in inhibition_site:
-            return 1
-        return -1
+# Below not needed since it isn't a part of the pre-training regiment.
+    # def encode_inhibition_site(self, inhibition_site):
+    #     """
+    #     Encodes the inhibition site string into a numerical label.
+    #
+    #     Args:
+    #         inhibition_site (str): The inhibition site string.
+    #
+    #     Returns:
+    #         int: 0 if the string contains 'RVP', 1 if it contains 'RVE', otherwise -1.
+    #     """
+    #     inhibition_site = inhibition_site.strip().upper()
+    #     if 'RVP' in inhibition_site:
+    #         return 0
+    #     elif 'RVE' in inhibition_site:
+    #         return 1
+    #     return -1
 
 
 
