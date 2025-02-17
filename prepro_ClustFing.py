@@ -18,17 +18,17 @@ for key in bart_hyperparameters.keys():
     prepare_dataset_for_pretrain(f"./model_name_{key}.csv", f"./data/trainable_selfies_{key}.csv")
 
 for key in bart_hyperparameters.keys():
-    df = pd.read_csv(f"/media/kollin/WindowsSecondary1/ThesisBU/Thesis/WIP_Thesis/data/trainable_selfies_{key}.csv")
+    df = pd.read_csv(f"./data/trainable_selfies_{key}.csv")
     print(f"reading the csv:\n{df.columns}")
     fp = make_fingerprint_thisthat(df)
 
     print(fp)
-    fp.to_csv(f"/media/kollin/WindowsSecondary1/ThesisBU/Thesis/WIP_Thesis/data/trainable_selfies_{key}_FP.csv")
+    fp.to_csv(f"./data/trainable_selfies_{key}_FP.csv")
 
 for key in bart_hyperparameters.keys():
-    df = pd.read_csv(f"/media/kollin/WindowsSecondary1/ThesisBU/Thesis/WIP_Thesis/data/trainable_selfies_{key}_FP.csv")
+    df = pd.read_csv(f"./data/trainable_selfies_{key}_FP.csv")
     print(f"reading the clustered csv:\n{df.columns}")
-    clusters = cluster_molecules(df, f"/media/kollin/WindowsSecondary1/ThesisBU/Thesis/WIP_Thesis/data/trainable_selfies_{key}_FP_CLUSTERED.csv")
+    clusters = cluster_molecules(df, f"./data/trainable_selfies_{key}_FP_CLUSTERED.csv")
     print(clusters)
     # print(clusters)
     # clusters.to_csv(f"/media/kollin/WindowsSecondary1/ThesisBU/Thesis/WIP_Thesis/data/trainable_selfies_{key}_FP.csv")
