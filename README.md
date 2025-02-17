@@ -91,7 +91,7 @@ This returns a `.csv` file with
 Next we proceed with 
 
 ```bash
-python3 MakeDefaultHyperparams.py. --file "./PretrainSpecs.yml"
+python3 MakeDefaultHyperparams.py --file "./PretrainSpecs.yml"
 ```
 This will make the `combined_config.yml` file with some default hyperparameters...
 
@@ -160,6 +160,14 @@ files. These may be incorporated into the `train_for_pretrain.py` file, but stil
 This will perform the clustering that will interplay with the `ClusteredSelfiesDataset` class in `train_for_pretrain.py`.
 This will add the fingerprints and cluster columns into the df (csv) file that will be utilized to help select the most likely singleton drugs for use in validation splitting.
 - should be one-offs, I hope? The last clusterIDs are lower in total count?
+
+
+Should be the following basics
+```bash
+python prepro_ClustFing.py 
+```
+At the moment to generate selfies, generate fingerprints, and then generate clusters...
+
 
 
 #### 3b. Train the pre-train model
