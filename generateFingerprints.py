@@ -291,8 +291,9 @@ def make_fingerprint_thisthat(df):
 # print(df.head())
 
 
-df = pd.read_csv(f"./data/trainable_selfies_model_lipinski.csv")
-
-fp = make_fingerprint_thisthat(df)
-
-print(fp)
+# DEBUG STATEMENTS:
+# df = pd.read_csv(f"./data/trainable_selfies_model_lipinski.csv")
+#
+# fp = make_fingerprint_thisthat(df)
+#
+# print(fp)

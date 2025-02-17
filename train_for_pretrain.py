@@ -725,7 +725,7 @@ def main():
     args = parser.parse_args()
 
     hyperparameters = load_hyperparameters(args.hyperparameters_path)
-    print("Loaded hyperparameters:", hyperparameters)
+    print("Loaded hyperparameters:", hyperparameters) # TODO: NEW 02/16/2025 figure out why BART is empty in combined_config... I THINK IT WORKS...
     bart_hyperparameters = hyperparameters.get("BART", {})
     print("BART hyperparameters:", bart_hyperparameters)
 

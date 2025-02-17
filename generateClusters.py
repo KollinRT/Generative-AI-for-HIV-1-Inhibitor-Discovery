@@ -427,7 +427,7 @@ def cluster_molecules(df, output_csv, num_perm=256, lsh_threshold=0.7):
     df['Cluster'] = df.index.map(lambda idx: cluster_mapping.get(idx, -1))
 
     # 6. Save the resulting DataFrame.
-    df.to_csv(output_csv, index=False)
-    print(f"Cluster assignments saved to {output_csv}")
+    df.to_csv(f"{output_csv[:-4]}_clustered.csv", index=False)
+    print(f"Cluster assignments saved to {output_csv[:-4]}_clustered.csv")
 
     return df
