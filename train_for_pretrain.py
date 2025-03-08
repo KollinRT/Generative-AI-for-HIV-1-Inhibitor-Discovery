@@ -588,8 +588,8 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
     # Load and process the DataFrame: apply fingerprinting and clustering
     df = pd.read_csv(f"./data/trainable_selfies_{key}.csv")
-    df = make_fingerprint_thisthat(df)
-    df = cluster_molecules(df, f"./data/trainable_selfies_{key}.csv")
+    # df = make_fingerprint_thisthat(df)
+    # df = cluster_molecules(df, f"./data/trainable_selfies_{key}.csv")
     print(df.columns)
     print(df.head(2))
 
@@ -708,7 +708,8 @@ def pretrain_BART(hyperparameters_dict, args, key):
                     print(f"Early stopping triggered after epoch {epoch + 1}")
                     break
 
-        torch.save(model.state_dict(), f'./selfies_BART_pretrained_{key}.pth')
+        # torch.save(model.state_dict(), f'./selfies_BART_pretrained_{key}.pth')
+        model.save_pretrained(f'./selfies_BART_pretrained_{key}')
         print(f"Model saved to ./selfies_BART_pretrained_{key}.pth")
 
 
@@ -725,7 +726,7 @@ def main():
     args = parser.parse_args()
 
     hyperparameters = load_hyperparameters(args.hyperparameters_path)
-    print("Loaded hyperparameters:", hyperparameters) # TODO: NEW 02/16/2025 figure out why BART is empty in combined_config... I THINK IT WORKS...
+    print("Loaded hyperparameters:", hyperparameters) # TODO: NEW 02/16/2025 figure out why BART is empty in combined_config... I THINK IT WORKS... ✓✓
     bart_hyperparameters = hyperparameters.get("BART", {})
     print("BART hyperparameters:", bart_hyperparameters)
 

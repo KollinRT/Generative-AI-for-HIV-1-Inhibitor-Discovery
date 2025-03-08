@@ -121,11 +121,14 @@ Need to add epoch % 5 == 0, log info on loss and epoch no...
 
 
 ### Logical execution
+```bash
+conda activate thesisproj
+```
 #### 1. Get the data
 utilize the file
 `getDataForPretrain.yml` 
 ```bash
-python3 getDataForPretrain.py --yaml="/media/kollin/WindowsSecondary1/ThesisBU/Thesis/WIP_Thesis/PretrainSpecs.yml"
+python3 getDataForPretrain.py --yaml="./PretrainSpecs.yml"
 ```
 gets you going to generate the files. This can then be fed into the next step.
 
@@ -140,9 +143,10 @@ utilize the file
 [//]: # (```)
 
 ```bash
-python3 MakeDefaultHyperparams.py 
-> Combined configuration saved to combined_config.yml
+python3 MakeDefaultHyperparams.py --file="./PretrainSpecs.yml"
 ```
+[//]: # (> Combined configuration saved to combined_config.yml)
+
 But first you have to generate the data for the `./combined_config.yml` file.
 This is in the 
 `MakeDefaultHyperparams.py` 
@@ -164,7 +168,7 @@ This will add the fingerprints and cluster columns into the df (csv) file that w
 
 Should be the following basics
 ```bash
-python prepro_ClustFing.py 
+python3 prepro_ClustFing.py 
 ```
 At the moment to generate selfies, generate fingerprints, and then generate clusters...
 
@@ -190,3 +194,10 @@ RTX 4090 24GB VRAM
 
 
 
+#### TODO:   
+- [ ] Get `getDataForFinetune.py` working for the finetuning dataset.
+    - [ ] Need to get random sampling done for 9:1 split for finetuning.
+- [ ] explore hyperparameter optimization
+    - [ ] this could include a pytorch LRScheduler... 
+    - [ ] this could also include trying adagrad? Maybe optimizing hyperparameter dimensions?
+      - [ ] check the post more...

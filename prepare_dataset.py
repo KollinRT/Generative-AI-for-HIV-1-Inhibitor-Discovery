@@ -179,7 +179,7 @@ from tokenizers import Tokenizer, models, pre_tokenizers, trainers, processors
 #     tokenizer.model.save(save_to)
 #
 
-
+import os
 def bpe_tokenizer(path="./data/selfies_subset.txt", save_to="./data/bpe/"):
     """
     BPE tokenizer configured for SELFIES data and suitable for generative tasks using models like BART.
@@ -189,10 +189,11 @@ def bpe_tokenizer(path="./data/selfies_subset.txt", save_to="./data/bpe/"):
     :return: None
     """
     # Ensure the directory exists
-    try:
-        mkdir(save_to)
-    except FileExistsError:
-        pass
+    # try:
+    #     mkdir(save_to)
+    # except FileExistsError:
+    #     pass
+    os.makedirs(save_to, exist_ok=True)
 
     # Create a tokenizer instance with BPE
     tokenizer = Tokenizer(models.BPE(unk_token="<unk>"))
@@ -213,6 +214,7 @@ def bpe_tokenizer(path="./data/selfies_subset.txt", save_to="./data/bpe/"):
     # Save the tokenizer and model to the specified directory
     tokenizer.save(save_to + "/bpe.json", pretty=True)
     tokenizer.model.save(save_to)
+    # tokenizer.save_pretrained(save_to)
 
 # check with vocab
 

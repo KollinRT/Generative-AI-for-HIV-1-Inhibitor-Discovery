@@ -225,6 +225,10 @@ def make_fingerprint_thisthat(df):
         DataStructs.ConvertToNumpyArray(fp, arr)  # Efficiently convert to NumPy
         fingerprints.append(arr)
 
+    # Drop df.molecules
+    df = df.drop(columns=['Molecule'])
+    df = df.drop(columns=['MW', 'numC', 'chain_length', 'cLogP', 'numRings'])
+
     # Add fingerprints to df
     df['Fingerprint'] = fingerprints
 

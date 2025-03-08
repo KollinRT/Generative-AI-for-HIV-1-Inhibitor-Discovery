@@ -1,9 +1,10 @@
 import argparse
 import pandas as pd
+import numpy as np
 import yaml
 from os.path import isfile
 from prepare_dataset import bpe_tokenizer, get_selfies_only, convert_to_selfies
-from SelfiesDataHandler import SelfiesDataset, collate_fn
+from SelfiesDataHandler import SelfiesDataset, collate_fn_fine, NNLossHandler
 from torch.utils.data import Dataset, DataLoader
 from transformers import BartForConditionalGeneration, BartConfig
 from tokenizers import Tokenizer
@@ -47,23 +48,71 @@ def finetune_BART(hyperparameters_dict, args, key):
     optimizer_selection = hyperparameters_dict[key]['optimizer']
     criterion_selection = hyperparameters_dict[key]['criterion']
     learning_rate = hyperparameters_dict[key]['LEARNING_RATE']
-    
+
+    # Define early stopping criteria
+    early_stopping_toggle = hyperparameters_dict[key]["early_stopping_toggle"]
+    early_stopping_threshold = hyperparameters_dict[key]["early_stopping_threshold"]
+    early_stopping_patience = hyperparameters_dict[key]["early_stopping_patience"]
+
+    loss_handler = NNLossHandler(
+        loss_name=hyperparameters_dict[key]['criterion'],
+        early_stopping_toggle=early_stopping_toggle,
+        early_stopping_threshold=early_stopping_threshold,
+        early_stopping_patience=early_stopping_patience
+    )
+
+    df = pd.read_csv(f"./data/smiles_finetune_data_properties_selfies.csv")
+
+    # DEBUG PURPOSES:
+    # Set a random seed for reproducibility
+    np.random.seed(42)
+    indices = np.random.permutation(len(df))
+    # Split at 90%
+    split_idx = int(len(df) * 0.9)
+    train_indices = indices[:split_idx]
+    test_indices = indices[split_idx:]
+    # Create two separate DataFrames
+    df_train = df.iloc[train_indices].reset_index(drop=True)
+    df_val = df.iloc[test_indices].reset_index(drop=True)
+
     # Load the tokenizer and dataset
-    tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
+    # tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
     # TODO: THIS IS WHERE THE FINE DATASET IS LOADED....
     # THIS IS THE SAME FINETUNING DATASET USED FOR ALL OF THE MODELS...
     # I CAN LOOP OVER THE KEYS BUT KEEP IT THE SAME BUT FEED IN THE DIFFERENT MODELS...
     # I ONLY NEED TO GET THE FINETUNED SELFIES DATASET ONCE... WITH GETDATAFINETUNE.... 
     # THIS CAN BE HARDCODED FOR BOTH!                                                 # make sure the tokenizer from pretrain is here also...
-    finetune_dataset = SelfiesDataset(csv_file=f"./data/smiles_finetune_data_properties.csv", tokenizer_path=f"./data/bpe_filter_{key}/bpe.json", mode='finetune')
+    # finetune_train_dataset = SelfiesDataset(csv_file=f"./data/smiles_finetune_data_properties_selfies.csv", tokenizer_path=f"./data/bpe_filter_{key}/bpe.json", mode='finetune')
+    # finetune_validation_dataset = SelfiesDataset(csv_file=f"./data/smiles_finetune_data_properties_selfies.csv", tokenizer_path=f"./data/bpe_filter_{key}/bpe.json", mode='finetune')
+    # Use the split DataFrames instead of the file path
+    finetune_train_dataset = SelfiesDataset(dataframe=df_train, tokenizer_path=f"./data/bpe_filter_{key}/bpe.json",
+                                            mode="finetune")
+    finetune_validation_dataset = SelfiesDataset(dataframe=df_val, tokenizer_path=f"./data/bpe_filter_{key}/bpe.json",
+                                                 mode="finetune")
+    # TODO: NEW 02/18/2025 get the IC50 finetune data!
+
     # TODO: Above should be the one fine_tune approach. It is the same for all models...
+    # TODO: NEW 02/18/2025... This should be a load the finetune train and validation models and randomly grab 90/10% split...
+    #
 
     # Create DataLoader
-    finetune_loader = DataLoader(finetune_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
+    # finetune_train_loader = DataLoader(finetune_train_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn_fine)
+    # finetune_validation_loader = DataLoader(finetune_validation_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn_fine)
+    finetune_train_loader = DataLoader(
+        finetune_train_dataset, batch_size=8, shuffle=True, collate_fn=collate_fn_fine
+    )
+    finetune_validation_loader = DataLoader(
+        finetune_validation_dataset, batch_size=8, shuffle=True, collate_fn=collate_fn_fine
+    )
 
     # TODO: update with the format for the model it should be... the correct model name....
-    model = BartForConditionalGeneration.from_pretrained(f'./selfies_BART_pretrained_{key}.pth')    
-    
+    # model = BartForConditionalGeneration.from_pretrained(f'./selfies_BART_pretrained_{key}.pth')
+    # model = BartForConditionalGeneration.from_pretrained('facebook/bart-base')  # Load base BART model
+    # state_dict = torch.load(f'./selfies_BART_pretrained_{key}.pth', map_location='cpu')  # Load state dict
+    # model.load_state_dict(state_dict)  # Load weights into model
+    model_path = f"./selfies_BART_pretrained_{key}/"
+    model = BartForConditionalGeneration.from_pretrained(model_path)
+
     if optimizer_selection == "adam":
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     elif optimizer_selection == "adamw":
@@ -98,59 +147,210 @@ def finetune_BART(hyperparameters_dict, args, key):
     elif criterion_selection == "smoothl1":
         criterion = torch.nn.SmoothL1Loss()
         
-    # Open a CSV file to save the epoch and loss
-    csv_file_path = f'./finetuning_loss_{key}.csv' # TODO: Update file names here!
+    # # Open a CSV file to save the epoch and loss
+    # csv_file_path = f'./finetuning_loss_{key}.csv' # TODO: Update file names here!
+    # with open(csv_file_path, mode='w', newline='') as csv_file:
+    #     csv_writer = csv.writer(csv_file)
+    #     csv_writer.writerow(['Epoch', 'Loss'])  # Write the header
+    #
+    #
+    #     # Check for CUDA
+    #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #     model.to(device)
+    #
+    #     # Training loop
+    #     model.train()      # set epoch via hyperparameters... config... THINK ABOUT EARLY STOPPING ALSO!
+    # #     for epoch in range(num_epochs):  # Number of epochs
+    # #         total_loss = 0
+    # #         for batch in tqdm(finetune_loader):
+    # #             # set somewhere else... look into that...
+    # #             input_ids = batch['input_ids'].to(device)
+    # #             attention_mask = batch['attention_mask'].to(device)
+    # #                                                             # makes sense I think?
+    # #             # Forward pass (assuming self-supervised learning, labels = input_ids)
+    # #             # TODO: Look into the model inputs.... it is just what is established above but should be good...
+    # #             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+    # #
+    # #
+    # #             # Compute loss and optimize
+    # #             loss = outputs.loss
+    # #             total_loss += loss.item()
+    # #             optimizer.zero_grad()
+    # #             loss.backward()
+    # #             optimizer.step()
+    # #         #TODO: DOES THIS LOOK RIGHT?
+    # #         # if args.early_stopping == True:
+    # #         #   if total_loss < args.early_stopping_threshold: # total_loss is going to get continuously larger?
+    # #         #       break
+    # #
+    # #         # print(f"Epoch {epoch + 1}, Loss: {total_loss / len(finetune_loader)}")
+    # #         # Log the loss every 5 epochs
+    # #         if (epoch + 1) % 5 == 0:
+    # #             print(f"Epoch {epoch + 1}, Loss: {total_loss / len(finetune_loader)}")
+    # #
+    # #         # Save the epoch and loss to the CSV file
+    # #         csv_writer.writerow([epoch + 1, total_loss / len(finetune_loader)])
+    # #
+    # #         # Early stopping (if enabled)
+    # #         if args.early_stopping and total_loss < args.early_stopping_threshold:
+    # #             print("Early stopping triggered")
+    # #             break
+    # #
+    # #
+    # # # Save the model                # TODO: this is replaced by the model key name...
+    # # torch.save(model.state_dict(), f'./selfies_BART_finetuned_{key}.pth')
+    # # # model.state_dict() or what else?
+    # # for batch in tqdm(finetune_train_loader):
+    # #     input_ids = batch['input_ids'].to(device)
+    # #     attention_mask = batch['attention_mask'].to(device)
+    # #
+    # #     print(f"input_ids shape: {input_ids.shape}")
+    # #     print(f"attention_mask shape: {attention_mask.shape}")
+    # #
+    # #     outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+    #
+    # for epoch in range(num_epochs):
+    #     total_train_loss = 0
+    #     for batch in tqdm(finetune_train_loader):
+    #         input_ids = batch['input_ids'].to(device)
+    #         attention_mask = batch['attention_mask'].to(device)
+    #
+    #         outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+    #         logits = outputs.logits
+    #         target = input_ids
+    #
+    #         logits = logits.view(-1, logits.size(-1))
+    #         target = target.view(-1)
+    #
+    #         loss = loss_handler.compute_loss(logits, target)
+    #         total_train_loss += loss.item()
+    #
+    #         optimizer.zero_grad()
+    #         loss.backward()
+    #         optimizer.step()
+    #
+    #     avg_train_loss = total_train_loss / len(finetune_train_loader)
+    #
+    #     total_val_loss = 0
+    #     model.eval()
+    #     with torch.no_grad():
+    #         for batch in tqdm(finetune_validation_loader):
+    #             input_ids = batch['input_ids'].to(device)
+    #             attention_mask = batch['attention_mask'].to(device)
+    #             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+    #             logits = outputs.logits
+    #             target = input_ids
+    #
+    #             logits = logits.view(-1, logits.size(-1))
+    #             target = target.view(-1)
+    #
+    #             val_loss = loss_handler.compute_loss(logits, target)
+    #             total_val_loss += val_loss.item()
+    #
+    #     avg_val_loss = total_val_loss / len(finetune_validation_loader)
+    #
+    #     print(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Validation Loss: {avg_val_loss}")
+    #     csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss])
+    #     csv_file.flush()
+    #
+    #     if early_stopping_toggle:
+    #         if avg_val_loss < best_loss:
+    #             best_loss = avg_val_loss
+    #             patience_counter = 0
+    #         else:
+    #             patience_counter += 1
+    #         if patience_counter >= early_stopping_patience:
+    #             print(f"Early stopping triggered after epoch {epoch + 1}")
+    #             break
+    #
+    # torch.save(model.state_dict(), f'./selfies_BART_finetuned_{key}.pth')
+    # print(f"Model saved to ./selfies_BART_finetuned_{key}.pth")
+    # Define the file path for saving the loss values
+    csv_file_path = f'./finetuning_loss_{key}.csv'
+
+    # ✅ Open the CSV file before training and keep it open
     with open(csv_file_path, mode='w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(['Epoch', 'Loss'])  # Write the header
+        csv_writer.writerow(['Epoch', 'Train Loss', 'Validation Loss'])  # Write header
 
-
-        # Check for CUDA
+        # ✅ Set up device
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
 
-        # Training loop
-        model.train()      # set epoch via hyperparameters... config... THINK ABOUT EARLY STOPPING ALSO!
-        for epoch in range(num_epochs):  # Number of epochs 
-            total_loss = 0
-            for batch in tqdm(finetune_loader):
-                # set somewhere else... look into that... 
+        # ✅ Initialize best loss for early stopping
+        best_loss = float('inf')
+        patience_counter = 0
+
+        # ✅ Training loop
+        for epoch in range(num_epochs):
+            total_train_loss = 0
+            optimizer.zero_grad()
+
+            # Training phase
+            model.train()
+            for batch in tqdm(finetune_train_loader, desc=f"Training Epoch {epoch + 1}"):
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
-                                                                # makes sense I think?
-                # Forward pass (assuming self-supervised learning, labels = input_ids)
-                # TODO: Look into the model inputs.... it is just what is established above but should be good...
+
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
-                
-                
-                # Compute loss and optimize
-                loss = outputs.loss
-                total_loss += loss.item()
+                logits = outputs.logits
+                target = input_ids
+
+                # Reshape for loss computation
+                logits = logits.view(-1, logits.size(-1))
+                target = target.view(-1)
+
+                loss = loss_handler.compute_loss(logits, target)
+                total_train_loss += loss.item()
+
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-            #TODO: DOES THIS LOOK RIGHT? 
-            # if args.early_stopping == True:
-            #   if total_loss < args.early_stopping_threshold: # total_loss is going to get continuously larger?
-            #       break
-            
-            # print(f"Epoch {epoch + 1}, Loss: {total_loss / len(finetune_loader)}")
-            # Log the loss every 5 epochs
-            if (epoch + 1) % 5 == 0:
-                print(f"Epoch {epoch + 1}, Loss: {total_loss / len(finetune_loader)}")
 
-            # Save the epoch and loss to the CSV file
-            csv_writer.writerow([epoch + 1, total_loss / len(finetune_loader)])
+            avg_train_loss = total_train_loss / len(finetune_train_loader)
 
-            # Early stopping (if enabled)
-            if args.early_stopping and total_loss < args.early_stopping_threshold:
-                print("Early stopping triggered")
-                break
+            # Validation phase
+            total_val_loss = 0
+            model.eval()
+            with torch.no_grad():
+                for batch in tqdm(finetune_validation_loader, desc=f"Validation Epoch {epoch + 1}"):
+                    input_ids = batch['input_ids'].to(device)
+                    attention_mask = batch['attention_mask'].to(device)
 
+                    outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+                    logits = outputs.logits
+                    target = input_ids
 
-    # Save the model                # TODO: this is replaced by the model key name...
+                    # Reshape for loss computation
+                    logits = logits.view(-1, logits.size(-1))
+                    target = target.view(-1)
+
+                    val_loss = loss_handler.compute_loss(logits, target)
+                    total_val_loss += val_loss.item()
+
+            avg_val_loss = total_val_loss / len(finetune_validation_loader)
+
+            print(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss:.6f}, Validation Loss: {avg_val_loss:.6f}")
+
+            # ✅ Save the epoch loss to the CSV file
+            csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss])
+            csv_file.flush()
+
+            # ✅ Early stopping logic
+            if early_stopping_toggle:
+                if avg_val_loss < best_loss:
+                    best_loss = avg_val_loss
+                    patience_counter = 0
+                else:
+                    patience_counter += 1
+
+                if patience_counter >= early_stopping_patience:
+                    print(f"🚨 Early stopping triggered after epoch {epoch + 1}")
+                    break
+
+    # ✅ Save the model after training completes
     torch.save(model.state_dict(), f'./selfies_BART_finetuned_{key}.pth')
-    # model.state_dict() or what else?
+    print(f"✅ Model saved to ./selfies_BART_finetuned_{key}.pth")
 
 
 def main():
@@ -176,7 +376,7 @@ def main():
         args.bpe_path = f"./data/bpe_filter_{key}/"
                 
         # Prepare data
-        prepare_data(args, key)
+        # prepare_data(args, key)
 
         # Train model
         finetune_BART(bart_hyperparameters, args, key)

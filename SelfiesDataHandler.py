@@ -202,32 +202,58 @@ def collate_fn_pre(batch):
     }
 
 
+# def collate_fn_fine(batch):
+#     if isinstance(batch[0], dict):
+#         # Fine-tuning mode
+#         input_ids = pad_sequence([item['input_ids'] for item in batch], batch_first=True, padding_value=0)
+#         ic50 = torch.stack([item['IC50'] for item in batch])
+#         inhibition_site = torch.stack([item['inhibition_site'] for item in batch])
+#
+#         return {
+#             'input_ids': input_ids,
+#             'IC50': ic50,
+#             'inhibition_site': inhibition_site
+#         }
+#     else:
+#         # Pretraining mode
+#         input_ids = pad_sequence(batch, batch_first=True, padding_value=0)
+#
+#         return {
+#             'input_ids': input_ids,
+#             'attention_mask': (input_ids != 0).long(),  # Create an attention mask (1 for actual tokens, 0 for padding)
+#             # You may need to add more keys depending on what your model expects, like 'decoder_input_ids'
+#         }
+
 def collate_fn_fine(batch):
-    if isinstance(batch[0], dict):
-        # Fine-tuning mode
-        input_ids = pad_sequence([item['input_ids'] for item in batch], batch_first=True, padding_value=0)
-        ic50 = torch.stack([item['IC50'] for item in batch])
-        inhibition_site = torch.stack([item['inhibition_site'] for item in batch])
+    """Collate function for DataLoader to pad sequences dynamically."""
 
-        return {
-            'input_ids': input_ids,
-            'IC50': ic50,
-            'inhibition_site': inhibition_site
-        }
-    else:
-        # Pretraining mode
-        input_ids = pad_sequence(batch, batch_first=True, padding_value=0)
+    input_ids = [item['input_ids'] for item in batch]
+    attention_masks = [item['attention_mask'] for item in batch]
 
-        return {
-            'input_ids': input_ids,
-            'attention_mask': (input_ids != 0).long(),  # Create an attention mask (1 for actual tokens, 0 for padding)
-            # You may need to add more keys depending on what your model expects, like 'decoder_input_ids'
-        }
+    # Pad sequences to the max length in the batch
+    input_ids_padded = pad_sequence(input_ids, batch_first=True, padding_value=1)  # 1 is typically the padding token ID
+    attention_masks_padded = pad_sequence(attention_masks, batch_first=True, padding_value=0)  # 0 for padding in mask
+
+    batch_dict = {
+        'input_ids': input_ids_padded,
+        'attention_mask': attention_masks_padded
+    }
+
+    # If finetune mode, include additional targets
+    if 'IC50' in batch[0]:
+        batch_dict['IC50'] = torch.stack([item['IC50'] for item in batch])
+        batch_dict['inhibition_site'] = torch.stack([item['inhibition_site'] for item in batch])
+
+    return batch_dict
+
 
 class SelfiesDataset(Dataset):
-    def __init__(self, csv_file, tokenizer_path, mode='pretrain'):
+    # def __init__(self, csv_file, tokenizer_path, mode='pretrain'):
+    def __init__(self, dataframe, tokenizer_path, mode='pretrain'):
         """Initialize the dataset, loading data from CSV, setting up tokenizer and mode."""
-        self.data = pd.read_csv(csv_file)
+        # self.data = pd.read_csv(csv_file)
+        self.data = dataframe
+
         # print(f"CSV columns: {self.data.columns.tolist()}")  # Debugging print statement
         self.tokenizer = Tokenizer.from_file(tokenizer_path)
         self.mode = mode  # Options are 'pretrain' or 'finetune'
@@ -255,17 +281,77 @@ class SelfiesDataset(Dataset):
     #             'IC50': torch.tensor([IC50], dtype=torch.float),
     #             'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
     #         }
+    # def __getitem__(self, idx):
+    #     selfies_string = self.data.iloc[idx]['selfies']
+    #     encoded = self.tokenizer.encode(selfies_string)
+    #     if self.mode == 'pretrain':
+    #         return {'input_ids': torch.tensor(encoded.ids, dtype=torch.long)}
+    #     elif self.mode == 'finetune':
+    #         IC50 = self.data.iloc[idx]['IC50']
+    #         inhibition_site = self.data.iloc[idx]['site_name']
+    #         inhibition_encoded = self.encode_inhibition_site(inhibition_site)
+    #         return {
+    #             'input_ids': torch.tensor(encoded.ids, dtype=torch.long),
+    #             'IC50': torch.tensor([IC50], dtype=torch.float),
+    #             'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
+    #         }
+
+    # def __getitem__(self, idx):
+    #     """Retrieve an item by index."""
+    #     selfies_string = self.data.iloc[idx]['selfies']
+    #     encoded = self.tokenizer.encode(selfies_string)
+    #
+    #     input_ids = torch.tensor(encoded.ids, dtype=torch.long)
+    #
+    #     # Create attention mask (1 for real tokens, 0 for padding)
+    #     attention_mask = torch.ones_like(input_ids, dtype=torch.long)  # Assuming no padding initially
+    #
+    #     if self.mode == 'pretrain':
+    #         return {
+    #             'input_ids': input_ids,
+    #             'attention_mask': attention_mask  # Include this to avoid KeyError
+    #         }
+    #
+    #     elif self.mode == 'finetune':
+    #         IC50 = self.data.iloc[idx]['IC50']
+    #         inhibition_site = self.data.iloc[idx]['site_name']
+    #         inhibition_encoded = self.encode_inhibition_site(inhibition_site)
+    #
+    #         return {
+    #             'input_ids': input_ids,
+    #             'attention_mask': attention_mask,  # Include this
+    #             'IC50': torch.tensor([IC50], dtype=torch.float),
+    #             'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
+    #         }
+
     def __getitem__(self, idx):
+        """Retrieve an item by index."""
         selfies_string = self.data.iloc[idx]['selfies']
+        # encoded = self.tokenizer.encode(selfies_string)
+        #
+        # # Convert input IDs to tensor
+        # input_ids = torch.tensor(encoded.ids, dtype=torch.long)
+
         encoded = self.tokenizer.encode(selfies_string)
+        input_ids = torch.tensor(encoded.ids[:256], dtype=torch.long)  # Truncate long sequences to 256 tokens
+
+        # Create attention mask: 1 for tokens, 0 for padding
+        attention_mask = torch.ones_like(input_ids, dtype=torch.long)
+
         if self.mode == 'pretrain':
-            return {'input_ids': torch.tensor(encoded.ids, dtype=torch.long)}
+            return {
+                'input_ids': input_ids,
+                'attention_mask': attention_mask  # Ensure attention_mask is included
+            }
+
         elif self.mode == 'finetune':
             IC50 = self.data.iloc[idx]['IC50']
             inhibition_site = self.data.iloc[idx]['site_name']
             inhibition_encoded = self.encode_inhibition_site(inhibition_site)
+
             return {
-                'input_ids': torch.tensor(encoded.ids, dtype=torch.long),
+                'input_ids': input_ids,
+                'attention_mask': attention_mask,  # Ensure attention_mask is included
                 'IC50': torch.tensor([IC50], dtype=torch.float),
                 'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
             }

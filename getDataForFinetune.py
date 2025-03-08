@@ -204,4 +204,11 @@ non_filter = pd.read_csv("./data/smiles_finetune_data_properties.csv")
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-print(f"saving properties df to: ./data/smiles_finetune_data_properties.csv")
+pandarallel.initialize()
+non_filter["selfies"] = non_filter["canonical_smiles"].parallel_apply(convert_to_selfies)
+non_filter.drop(non_filter[non_filter.selfies.isnull()].index, inplace=True)
+print(non_filter.columns)  # DEBUG
+print(f"smiles_data.columns post-drop: {non_filter.columns}")
+non_filter.to_csv(f"./data/smiles_finetune_data_properties_selfies.csv", index=False)  # TODO: index=False, header=False for sure...
+
+# print(f"saving properties df to: ./data/smiles_finetune_data_properties.csv")
