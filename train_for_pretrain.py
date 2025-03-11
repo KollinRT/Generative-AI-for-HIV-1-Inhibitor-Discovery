@@ -576,6 +576,12 @@ def pretrain_BART(hyperparameters_dict, args, key):
     early_stopping_threshold = hyperparameters_dict[key]["early_stopping_threshold"]
     early_stopping_patience = hyperparameters_dict[key]["early_stopping_patience"]
 
+    # TODO: NEW 03/11/2025: Work to utilize a LRScheduler (https://machinelearningmastery.com/using-learning-rate-schedule-in-pytorch-training/)
+    # torch.optim.lr_scheduler.ReduceLROnPlateau
+
+    # Define learning rate scheduler
+    learning_rate_scheduler_selection = hyperparameters_dict[key]['lr_sched']
+
     loss_handler = NNLossHandler(
         loss_name=hyperparameters_dict[key]['criterion'],
         early_stopping_toggle=early_stopping_toggle,
@@ -636,6 +642,36 @@ def pretrain_BART(hyperparameters_dict, args, key):
         optimizer = torch.optim.Adadelta(model.parameters(), lr=learning_rate)
     else:
         raise ValueError(f"Invalid optimizer: {optimizer_selection}")
+
+
+    # TODO: NEW 03/11/2025: Work to utilize a LRScheduler (https://machinelearningmastery.com/using-learning-rate-schedule-in-pytorch-training/)
+    # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+    if learning_rate_scheduler_selection == "ReduceLROnPlateau":
+        lr_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min")
+    elif learning_rate_scheduler_selection == ""
+        lr_sched = torch.optim.lr_scheduler.LinearLR((optimizer)
+    elif learning_rate_scheduler_selection == ""
+        del(lr_sched)
+    else:
+        raise ValueError(f"Invalid optimizer: {learning_rate_scheduler_selection}")
+
+    """
+    learning_rate_scheduler_selection = hyperparameters_dict[key]['lr_sched']
+
+    if learning_rate_scheduler_selection == "ReduceLROnPlateau":
+        lr_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min")
+    elif learning_rate_scheduler_selection == "LinearLR":
+        lr_sched = torch.optim.lr_scheduler.LinearLR(optimizer)  # Fixed parentheses
+    elif learning_rate_scheduler_selection == "":
+        lr_sched = None  # Do not use any scheduler
+    else:
+        raise ValueError(f"Invalid optimizer: {learning_rate_scheduler_selection}")
+        
+    # Apply the learning rate scheduler only if it's set IN THE TRAINING LOOP!
+    if lr_sched is not None:
+        lr_sched.step()
+    """
+
 
     # Print DataFrame info for debugging
     print("Final training DataFrame:")
