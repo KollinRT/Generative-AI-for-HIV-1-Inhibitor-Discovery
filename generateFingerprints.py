@@ -207,6 +207,8 @@ def make_fingerprint_thisthat(df):
     """
     # Load dataset
     # df = pd.read_csv(f"/media/kollin/WindowsSecondary/ThesisBU/Thesis/WIP_Thesis/data/molecule_data_model_{key}.csv")
+    # df = pd.read_csv(f"/home/trujillok/Desktop/Thesis/WIP_Thesis/data/molecule_data_model_nada.csv")
+
     # Convert SELFIES to RDKit Molecule
     df['Molecule'] = df['selfies'].apply(selfies_to_mol)
 
@@ -226,8 +228,8 @@ def make_fingerprint_thisthat(df):
         fingerprints.append(arr)
 
     # Drop df.molecules
-    df = df.drop(columns=['Molecule'])
-    df = df.drop(columns=['MW', 'numC', 'chain_length', 'cLogP', 'numRings'])
+    # df = df.drop(columns=['Molecule'])
+    # df = df.drop(columns=['MW', 'numC', 'chain_length', 'cLogP', 'numRings'])
 
     # Add fingerprints to df
     df['Fingerprint'] = fingerprints

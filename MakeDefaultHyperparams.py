@@ -30,7 +30,8 @@ default_config = OrderedDict([
     ("criterion", "crossentropy"),
     ("early_stopping_toggle", True),
     ("early_stopping_threshold", 5.0E-5),
-    ("early_stopping_patience", 5)
+    ("early_stopping_patience", 5),
+    ("lr_sched", None)
 ])
 # TODO: Add early stopping here:
 """

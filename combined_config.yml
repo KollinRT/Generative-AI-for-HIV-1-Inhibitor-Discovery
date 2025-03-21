@@ -23,6 +23,7 @@ BART:
     early_stopping_toggle: true
     early_stopping_threshold: 5.0e-05
     early_stopping_patience: 5
+    lr_sched: null
   model_2:
     HIDDEN_SIZE: 768
     TRAIN_BATCH_SIZE: 16
@@ -47,6 +48,7 @@ BART:
     early_stopping_toggle: true
     early_stopping_threshold: 5.0e-05
     early_stopping_patience: 5
+    lr_sched: null
   model_3:
     HIDDEN_SIZE: 768
     TRAIN_BATCH_SIZE: 16
@@ -71,6 +73,7 @@ BART:
     early_stopping_toggle: true
     early_stopping_threshold: 5.0e-05
     early_stopping_patience: 5
+    lr_sched: null
   model_lipinski:
     HIDDEN_SIZE: 768
     TRAIN_BATCH_SIZE: 16
@@ -95,6 +98,7 @@ BART:
     early_stopping_toggle: true
     early_stopping_threshold: 5.0e-05
     early_stopping_patience: 5
+    lr_sched: null
   model_nada:
     HIDDEN_SIZE: 768
     TRAIN_BATCH_SIZE: 16
@@ -119,3 +123,4 @@ BART:
     early_stopping_toggle: true
     early_stopping_threshold: 5.0e-05
     early_stopping_patience: 5
+    lr_sched: ReduceLROnPlateau

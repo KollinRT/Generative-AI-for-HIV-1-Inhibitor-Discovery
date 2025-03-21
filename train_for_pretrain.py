@@ -648,10 +648,10 @@ def pretrain_BART(hyperparameters_dict, args, key):
     # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
     if learning_rate_scheduler_selection == "ReduceLROnPlateau":
         lr_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min")
-    elif learning_rate_scheduler_selection == ""
-        lr_sched = torch.optim.lr_scheduler.LinearLR((optimizer)
-    elif learning_rate_scheduler_selection == ""
-        del(lr_sched)
+    elif learning_rate_scheduler_selection == "LinearLR":
+        lr_sched = torch.optim.lr_scheduler.LinearLR(optimizer)
+    elif learning_rate_scheduler_selection is None:
+        lr_sched = None
     else:
         raise ValueError(f"Invalid optimizer: {learning_rate_scheduler_selection}")
 
@@ -681,7 +681,7 @@ def pretrain_BART(hyperparameters_dict, args, key):
     csv_file_path = f'./pretraining_loss_{key}.csv'
     with open(csv_file_path, mode='w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(['Epoch', 'Train Loss', 'Validation Loss'])
+        csv_writer.writerow(['Epoch', 'Train Loss', 'Validation Loss', 'learning_rate'])
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
@@ -730,8 +730,16 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
             avg_val_loss = total_val_loss / len(val_loader)
 
+            # Adjust Learning Rate
+            if lr_sched is not None:
+                lr_sched.step()
+
             print(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Validation Loss: {avg_val_loss}")
-            csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss])
+            if lr_sched is not None:
+                csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss, lr_sched.get_last_lr()])
+            else:
+                csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss, "default"])
+
             csv_file.flush()
 
             if early_stopping_toggle:

@@ -6,7 +6,9 @@ import yaml
 
 from prepare_dataset import prepare_dataset_for_pretrain
 
-from fp import create_fingerprint
+# from fp import create_fingerprint
+from generateFingerprints import make_fingerprint_thisthat
+
 
 def load_hyperparameters(path):
     with open(path, 'r') as file:
@@ -25,9 +27,14 @@ numPerms = [512]
 #     256: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
 #     512: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
 # }
+# thresholds_map = {
+#     512: [0.4, 0.5, 0.6]
+# }
+
 thresholds_map = {
-    512: [0.4, 0.5, 0.6]
+    256: [0.7]
 }
+
 
 
 # for key in bart_hyperparameters.keys():
@@ -68,7 +75,7 @@ for key in bart_hyperparameters.keys():
 for key in bart_hyperparameters.keys():
     df = pd.read_csv(f"./data/trainable_selfies_{key}.csv")
     print(f"reading the csv:\n{df.columns}")
-    fp = create_fingerprint(df)
+    fp = make_fingerprint_thisthat(df)
 
     fp = fp.drop(columns=['Molecule'])
     print(fp)
