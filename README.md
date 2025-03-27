@@ -134,7 +134,7 @@ gets you going to generate the files. This can then be fed into the next step.
 
 ##### Need to make the default parameters
 ```python3
-python3 MakeDefaultHyperparams.py --yaml="./PretrainSpecs.yml"
+python3 MakeDefaultHyperparams.py --file="./PretrainSpecs.yml"
 ```
 
 #### 2. Generate the combined_config file
@@ -208,3 +208,16 @@ RTX 4090 24GB VRAM
       - [ ] check the post more...
 
 - [ ] This could be trying `"ReduceLROnPlateau" class (https://github.com/pytorch/pytorch/blob/main/torch/optim/lr_scheduler.py), would this work well?
+
+
+#### Definitive Workflow make into a bash script
+```bash
+conda activate thesisproj
+
+python3 getDataForPretrain.py --yaml="./PretrainSpecs.yml"
+
+python3 MakeDefaultHyperparams.py --file="./PretrainSpecs.yml"
+
+python3 prepro_ClustFing.py 
+
+```

@@ -9,6 +9,8 @@ from prepare_dataset import prepare_dataset_for_pretrain
 # from fp import create_fingerprint
 from generateFingerprints import make_fingerprint_thisthat
 
+import gc # clear memory
+
 
 def load_hyperparameters(path):
     with open(path, 'r') as file:
@@ -19,7 +21,9 @@ bart_hyperparameters = hyperparameters.get("BART", {})
 
 # Define numPerms and thresholds as lists
 # numPerms = [64, 128, 256, 512]
-numPerms = [512]
+# numPerms = [512]
+# numPerms = [64]
+numPerms = [256]
 
 # thresholds_map = {
 #     64:  [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
@@ -34,6 +38,11 @@ numPerms = [512]
 thresholds_map = {
     256: [0.7]
 }
+
+# thresholds_map = {
+#     64:  [0.7]
+# }
+
 
 
 
@@ -72,6 +81,9 @@ thresholds_map = {
 for key in bart_hyperparameters.keys():
     prepare_dataset_for_pretrain(f"./model_name_{key}.csv", f"./data/trainable_selfies_{key}.csv")
 
+gc.collect()
+
+
 for key in bart_hyperparameters.keys():
     df = pd.read_csv(f"./data/trainable_selfies_{key}.csv")
     print(f"reading the csv:\n{df.columns}")
@@ -81,6 +93,7 @@ for key in bart_hyperparameters.keys():
     print(fp)
     fp.to_csv(f"./data/trainable_selfies_{key}_FP.csv")
 
+gc.collect()
 
 # Step 3: Perform Clustering & Log Cluster Count
 for key in bart_hyperparameters.keys():

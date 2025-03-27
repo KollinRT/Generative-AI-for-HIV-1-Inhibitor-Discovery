@@ -233,6 +233,7 @@ def make_fingerprint_thisthat(df):
 
     # Add fingerprints to df
     df['Fingerprint'] = fingerprints
+    df['Fingerprint'] = df['Fingerprint'].apply(lambda arr: ''.join(str(x) for x in arr)) # Convert to string
 
     print("columns in thisthat")
     print(df.columns)
@@ -303,3 +304,5 @@ def make_fingerprint_thisthat(df):
 # fp = make_fingerprint_thisthat(df)
 #
 # print(fp)
+
+# TODO: NEW 03/26/2025 double check that these fingerprints are encoded the right way...
