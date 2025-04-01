@@ -123,4 +123,4 @@ BART:
     early_stopping_toggle: true
     early_stopping_threshold: 5.0e-05
     early_stopping_patience: 5
-    lr_sched: ReduceLROnPlateau
+    lr_sched: null

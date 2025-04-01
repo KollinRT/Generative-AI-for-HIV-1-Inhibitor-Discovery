@@ -593,7 +593,7 @@ def pretrain_BART(hyperparameters_dict, args, key):
     tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
 
     # Load and process the DataFrame: apply fingerprinting and clustering
-    df = pd.read_csv(f"./data/trainable_selfies_{key}.csv")
+    df = pd.read_csv(f"./data/trainable_selfies_{key}_FP_CLUSTERED_256perms_7_clustered.csv")
     # df = make_fingerprint_thisthat(df)
     # df = cluster_molecules(df, f"./data/trainable_selfies_{key}.csv")
     print(df.columns)
@@ -604,6 +604,10 @@ def pretrain_BART(hyperparameters_dict, args, key):
     mol_count = int(len(df) * 0.9)
     train_df = df[:mol_count]  # 90% for training
     valid_df = df[mol_count:]  # 10% for validation
+
+    # randomize the data and redo it.
+    train_df = train_df.sample(frac=1, random_state=42).reset_index(drop=True)
+    valid_df = valid_df.sample(frac=1, random_state=42).reset_index(drop=True)
 
     # Instead of passing the raw DataFrame to DataLoader, wrap it in the new ClusteredSelfiesDataset
     train_dataset = ClusteredSelfiesDataset(train_df, tokenizer, mode='pretrain')
@@ -742,15 +746,15 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
             csv_file.flush()
 
-            if early_stopping_toggle:
-                if avg_val_loss < best_loss:
-                    best_loss = avg_val_loss
-                    patience_counter = 0
-                else:
-                    patience_counter += 1
-                if patience_counter >= early_stopping_patience:
-                    print(f"Early stopping triggered after epoch {epoch + 1}")
-                    break
+            # if early_stopping_toggle:
+            #     if avg_val_loss < best_loss:
+            #         best_loss = avg_val_loss
+            #         patience_counter = 0
+            #     else:
+            #         patience_counter += 1
+            #     if patience_counter >= early_stopping_patience:
+            #         print(f"Early stopping triggered after epoch {epoch + 1}")
+            #         break
 
         # torch.save(model.state_dict(), f'./selfies_BART_pretrained_{key}.pth')
         model.save_pretrained(f'./selfies_BART_pretrained_{key}')

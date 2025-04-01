@@ -132,10 +132,13 @@ python3 getDataForPretrain.py --yaml="./PretrainSpecs.yml"
 ```
 gets you going to generate the files. This can then be fed into the next step.
 
-##### Need to make the default parameters
-```python3
-python3 MakeDefaultHyperparams.py --file="./PretrainSpecs.yml"
-```
+[//]: # (##### Need to make the default parameters)
+
+[//]: # (```bash)
+
+[//]: # (python3 MakeDefaultHyperparams.py --file="./PretrainSpecs.yml")
+
+[//]: # (```)
 
 #### 2. Generate the combined_config file
 utilize the file
