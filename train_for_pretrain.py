@@ -582,15 +582,27 @@ def pretrain_BART(hyperparameters_dict, args, key):
     # Define learning rate scheduler
     learning_rate_scheduler_selection = hyperparameters_dict[key]['lr_sched']
 
+    # loss_handler = NNLossHandler(
+    #     loss_name=hyperparameters_dict[key]['criterion'],
+    #     early_stopping_toggle=early_stopping_toggle,
+    #     early_stopping_threshold=early_stopping_threshold,
+    #     early_stopping_patience=early_stopping_patience
+    # )
+
+    # Load the tokenizer
+    tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
+   
+    pad_token_id = tokenizer.token_to_id("<pad>")
     loss_handler = NNLossHandler(
         loss_name=hyperparameters_dict[key]['criterion'],
         early_stopping_toggle=early_stopping_toggle,
         early_stopping_threshold=early_stopping_threshold,
-        early_stopping_patience=early_stopping_patience
+        early_stopping_patience=early_stopping_patience,
+        pad_token_id=pad_token_id  # <- Add this
     )
 
     # Load the tokenizer
-    tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
+    #tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
 
     # Load and process the DataFrame: apply fingerprinting and clustering
     df = pd.read_csv(f"./data/trainable_selfies_{key}_FP_CLUSTERED_256perms_7_clustered.csv")
@@ -707,6 +719,17 @@ def pretrain_BART(hyperparameters_dict, args, key):
                 logits = logits.view(-1, logits.size(-1))
                 target = target.view(-1)
 
+                # 👇 Add this logging before loss calculation
+                if epoch == 0 and total_train_loss == 0:  # Only print once
+                    print("🔍 First batch input shape:", input_ids.shape)
+                    print("🔍 First input_ids example:", input_ids[0][:20])
+                    print("🔍 PAD token ID:", pad_token_id)
+                    lengths = (input_ids != pad_token_id).sum(dim=1)
+                    print("🔍 Non-padding lengths:", lengths.tolist())
+                    print("🔍 Avg length:", lengths.float().mean().item())
+
+                loss = loss_handler.compute_loss(logits, target)
+
                 loss = loss_handler.compute_loss(logits, target)
                 total_train_loss += loss.item()
 
@@ -719,6 +742,17 @@ def pretrain_BART(hyperparameters_dict, args, key):
             total_val_loss = 0
             model.eval()
             with torch.no_grad():
+
+                # Debug val input batch (just once)
+                if epoch == 0:
+                    for batch in val_loader:
+                        print("🔎 Validation batch input shape:", batch['input_ids'].shape)
+                        print("🔎 First validation input:", batch['input_ids'][0][:20])
+                        lengths = (batch['input_ids'] != pad_token_id).sum(dim=1)
+                        print("🔎 Val input lengths:", lengths.tolist())
+                        print("🔎 Avg val length:", lengths.float().mean().item())
+                        break  # Just one batch
+
                 for batch in tqdm(val_loader):
                     input_ids = batch['input_ids'].to(device)
                     attention_mask = batch['attention_mask'].to(device)

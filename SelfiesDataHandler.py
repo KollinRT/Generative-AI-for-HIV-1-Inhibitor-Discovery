@@ -525,7 +525,9 @@ class NNLossHandler:
             ValueError: If an invalid loss function name is provided.
         """
         if loss_name == "crossentropy":
-            return torch.nn.CrossEntropyLoss()
+            pad_token_id = kwargs.get("pad_token_id", 1)  # default to 1, can override
+            return torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
+            # return torch.nn.CrossEntropyLoss()
         elif loss_name == "nll":
             return torch.nn.NLLLoss()
         elif loss_name == "poisson":
