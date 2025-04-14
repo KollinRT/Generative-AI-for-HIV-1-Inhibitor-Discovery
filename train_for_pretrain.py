@@ -480,6 +480,7 @@ import csv
 import os
 from generateFingerprints import make_fingerprint_thisthat
 from generateClusters import cluster_molecules
+from utils import diff_to_string, encode_differences_to_string
 
 
 def load_hyperparameters(path):
@@ -566,7 +567,19 @@ class ClusteredSelfiesDataset(Dataset):
 # ===================================
 
 def pretrain_BART(hyperparameters_dict, args, key):
-    # Define learning hyperparameters
+    # Setup File config parameters
+    base_model_name = "skip_base"  # Customize as needed
+    base_config = hyperparameters_dict[base_model_name]
+    current_config = hyperparameters_dict[key]
+
+    diffs = diff_to_string(base_config, current_config)
+    filename_stub = encode_differences_to_string(base_model_name, diffs)
+
+    model_save_dir = f'./selfies_BART_pretrained__{filename_stub}'
+    csv_file_path = f'./pretraining_loss__{filename_stub}.csv'
+
+
+    # Define Training Hyperparameters
     num_epochs = hyperparameters_dict[key]['TRAIN_EPOCHS']
     learning_rate = hyperparameters_dict[key]['LEARNING_RATE']
     optimizer_selection = hyperparameters_dict[key]['optimizer']
@@ -589,7 +602,7 @@ def pretrain_BART(hyperparameters_dict, args, key):
     #     early_stopping_patience=early_stopping_patience
     # )
 
-    # Load the tokenizer
+    # Load the tokenizer + Loss handler
     tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
    
     pad_token_id = tokenizer.token_to_id("<pad>")
@@ -604,6 +617,7 @@ def pretrain_BART(hyperparameters_dict, args, key):
     # Load the tokenizer
     #tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
 
+    # Load DF and Cluster
     # Load and process the DataFrame: apply fingerprinting and clustering
     df = pd.read_csv(f"./data/trainable_selfies_{key}_FP_CLUSTERED_256perms_7_clustered.csv")
     # df = make_fingerprint_thisthat(df)
@@ -643,9 +657,16 @@ def pretrain_BART(hyperparameters_dict, args, key):
         eos_token_id=tokenizer.token_to_id("</s>"),
         mask_token_id=tokenizer.token_to_id("<mask>")
     )
-
     model = BartForConditionalGeneration(config)
 
+    # === [5] OPTIMIZER & LR SCHEDULER ===
+    # optimizers = {
+    #     "adam": torch.optim.Adam,
+    #     "adamw": torch.optim.AdamW,
+    #     "sgd": torch.optim.SGD,
+    #     "adagrad": torch.optim.Adagrad,
+    #     "adadelta": torch.optim.Adadelta
+    # }
     if optimizer_selection == "adam":
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     elif optimizer_selection == "adamw":
@@ -658,6 +679,30 @@ def pretrain_BART(hyperparameters_dict, args, key):
         optimizer = torch.optim.Adadelta(model.parameters(), lr=learning_rate)
     else:
         raise ValueError(f"Invalid optimizer: {optimizer_selection}")
+
+    # optimizer = optimizers[optimizer_selection](model.parameters(), lr=learning_rate)
+
+    if learning_rate_scheduler_selection == "ReduceLROnPlateau":
+        lr_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min")
+    elif learning_rate_scheduler_selection == "LinearLR":
+        lr_sched = torch.optim.lr_scheduler.LinearLR(optimizer)
+    elif learning_rate_scheduler_selection is None:
+        lr_sched = None
+    else:
+        raise ValueError(f"Invalid lr scheduler: {learning_rate_scheduler_selection}")
+
+    # if optimizer_selection == "adam":
+    #     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    # elif optimizer_selection == "adamw":
+    #     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    # elif optimizer_selection == "sgd":
+    #     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+    # elif optimizer_selection == "adagrad":
+    #     optimizer = torch.optim.Adagrad(model.parameters(), lr=learning_rate)
+    # elif optimizer_selection == "adadelta":
+    #     optimizer = torch.optim.Adadelta(model.parameters(), lr=learning_rate)
+    # else:
+    #     raise ValueError(f"Invalid optimizer: {optimizer_selection}")
 
 
     # TODO: NEW 03/11/2025: Work to utilize a LRScheduler (https://machinelearningmastery.com/using-learning-rate-schedule-in-pytorch-training/)
@@ -693,17 +738,17 @@ def pretrain_BART(hyperparameters_dict, args, key):
     print("Final training DataFrame:")
     print(train_df.head(2))
 
-    # Training loop
-    csv_file_path = f'./pretraining_loss_{key}.csv'
+    # Training Loop START
+    # csv_file_path = f'./pretraining_loss_{key}.csv'
+    # csv_file_path = f'./pretraining_loss__{filename_stub}.csv'
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    best_loss = float('inf')
+    patience_counter = 0
+
     with open(csv_file_path, mode='w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(['Epoch', 'Train Loss', 'Validation Loss', 'learning_rate'])
-
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model.to(device)
-
-        best_loss = float('inf')
-        patience_counter = 0
 
         model.train()
         for epoch in range(num_epochs):
@@ -713,11 +758,14 @@ def pretrain_BART(hyperparameters_dict, args, key):
                 attention_mask = batch['attention_mask'].to(device)
 
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
-                logits = outputs.logits
-                target = input_ids
+                # logits = outputs.logits
+                # target = input_ids
+                #
+                # logits = logits.view(-1, logits.size(-1))
+                # target = target.view(-1)
+                logits = outputs.logits.view(-1, outputs.logits.size(-1))
+                target = input_ids.view(-1)
 
-                logits = logits.view(-1, logits.size(-1))
-                target = target.view(-1)
 
                 # 👇 Add this logging before loss calculation
                 if epoch == 0 and total_train_loss == 0:  # Only print once
@@ -727,8 +775,6 @@ def pretrain_BART(hyperparameters_dict, args, key):
                     lengths = (input_ids != pad_token_id).sum(dim=1)
                     print("🔍 Non-padding lengths:", lengths.tolist())
                     print("🔍 Avg length:", lengths.float().mean().item())
-
-                loss = loss_handler.compute_loss(logits, target)
 
                 loss = loss_handler.compute_loss(logits, target)
                 total_train_loss += loss.item()
@@ -741,8 +787,8 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
             total_val_loss = 0
             model.eval()
-            with torch.no_grad():
 
+            with torch.no_grad():
                 # Debug val input batch (just once)
                 if epoch == 0:
                     for batch in val_loader:
@@ -757,17 +803,21 @@ def pretrain_BART(hyperparameters_dict, args, key):
                     input_ids = batch['input_ids'].to(device)
                     attention_mask = batch['attention_mask'].to(device)
                     outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
-                    logits = outputs.logits
-                    target = input_ids
+                    # logits = outputs.logits
+                    # target = input_ids
+                    #
+                    # logits = logits.view(-1, logits.size(-1))
+                    # target = target.view(-1)
+                    logits = outputs.logits.view(-1, outputs.logits.size(-1))
+                    target = input_ids.view(-1)
 
-                    logits = logits.view(-1, logits.size(-1))
-                    target = target.view(-1)
 
                     val_loss = loss_handler.compute_loss(logits, target)
                     total_val_loss += val_loss.item()
 
             avg_val_loss = total_val_loss / len(val_loader)
 
+# TODO: 04/10/2025 ENDED CODE HERE...
             # Adjust Learning Rate
             if lr_sched is not None:
                 lr_sched.step()
@@ -791,8 +841,19 @@ def pretrain_BART(hyperparameters_dict, args, key):
             #         break
 
         # torch.save(model.state_dict(), f'./selfies_BART_pretrained_{key}.pth')
-        model.save_pretrained(f'./selfies_BART_pretrained_{key}')
-        print(f"Model saved to ./selfies_BART_pretrained_{key}.pth")
+        # model.save_pretrained(f'./selfies_BART_pretrained_{key}')
+        # print(f"Model saved to ./selfies_BART_pretrained_{key}.pth")
+        # Assume base model is defined at top level (you can pass it in or hardcode if needed)
+        base_model_name = "skip_base"  # <- Change if needed
+        base_config = hyperparameters_dict[base_model_name]
+        current_config = hyperparameters_dict[key]
+        #TODO 04/14/2025 need to readjust the models and establish a base model here! This will be good!
+        diffs = diff_to_string(base_config, current_config)
+        filename_stub = encode_differences_to_string(base_model_name, diffs)
+
+        save_dir = f'./selfies_BART_pretrained__{filename_stub}'
+        model.save_pretrained(save_dir)
+        print(f"✅ Model saved to {save_dir}")
 
 
 def main():
