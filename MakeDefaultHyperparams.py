@@ -21,7 +21,6 @@ default_config = OrderedDict([
     ("NUM_DECODER_ATTENTION_HEADS", 12),
     ("ENCODER_FFN_DIM", 3072),
     ("DECODER_FFN_DIM", 3072),
-    ("VOCAB_SIZE", 30000),
     ("MAX_POSITION_EMBEDDINGS", 514),
     ("NUM_ATTENTION_HEADS", 12),
     ("NUM_HIDDEN_LAYERS", 8),

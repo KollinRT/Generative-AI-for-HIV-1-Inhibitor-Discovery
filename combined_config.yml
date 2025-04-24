@@ -13,7 +13,6 @@ BART:
     NUM_DECODER_ATTENTION_HEADS: 12
     ENCODER_FFN_DIM: 3072
     DECODER_FFN_DIM: 3072
-    VOCAB_SIZE: 30000
     MAX_POSITION_EMBEDDINGS: 514
     NUM_ATTENTION_HEADS: 12
     NUM_HIDDEN_LAYERS: 8
@@ -38,12 +37,11 @@ BART:
     NUM_DECODER_ATTENTION_HEADS: 12
     ENCODER_FFN_DIM: 3072
     DECODER_FFN_DIM: 3072
-    VOCAB_SIZE: 30000
     MAX_POSITION_EMBEDDINGS: 514
     NUM_ATTENTION_HEADS: 12
     NUM_HIDDEN_LAYERS: 8
     TYPE_VOCAB_SIZE: 1
-    optimizer: adam
+    optimizer: adamw
     criterion: crossentropy
     early_stopping_toggle: true
     early_stopping_threshold: 5.0e-05
@@ -63,12 +61,11 @@ BART:
     NUM_DECODER_ATTENTION_HEADS: 12
     ENCODER_FFN_DIM: 3072
     DECODER_FFN_DIM: 3072
-    VOCAB_SIZE: 30000
     MAX_POSITION_EMBEDDINGS: 514
     NUM_ATTENTION_HEADS: 12
     NUM_HIDDEN_LAYERS: 8
     TYPE_VOCAB_SIZE: 1
-    optimizer: adam
+    optimizer: adagrad
     criterion: crossentropy
     early_stopping_toggle: true
     early_stopping_threshold: 5.0e-05
@@ -88,18 +85,17 @@ BART:
     NUM_DECODER_ATTENTION_HEADS: 12
     ENCODER_FFN_DIM: 3072
     DECODER_FFN_DIM: 3072
-    VOCAB_SIZE: 30000
     MAX_POSITION_EMBEDDINGS: 514
     NUM_ATTENTION_HEADS: 12
     NUM_HIDDEN_LAYERS: 8
     TYPE_VOCAB_SIZE: 1
-    optimizer: adam
+    optimizer: adadelta
     criterion: crossentropy
     early_stopping_toggle: true
     early_stopping_threshold: 5.0e-05
     early_stopping_patience: 5
     lr_sched: null
-  model_lipinski:
+  model_4:
     HIDDEN_SIZE: 768
     TRAIN_BATCH_SIZE: 16
     VALID_BATCH_SIZE: 8
@@ -113,7 +109,6 @@ BART:
     NUM_DECODER_ATTENTION_HEADS: 12
     ENCODER_FFN_DIM: 3072
     DECODER_FFN_DIM: 3072
-    VOCAB_SIZE: 30000
     MAX_POSITION_EMBEDDINGS: 514
     NUM_ATTENTION_HEADS: 12
     NUM_HIDDEN_LAYERS: 8
@@ -124,7 +119,7 @@ BART:
     early_stopping_threshold: 5.0e-05
     early_stopping_patience: 5
     lr_sched: null
-  model_nada:
+  model_5:
     HIDDEN_SIZE: 768
     TRAIN_BATCH_SIZE: 16
     VALID_BATCH_SIZE: 8
@@ -138,7 +133,102 @@ BART:
     NUM_DECODER_ATTENTION_HEADS: 12
     ENCODER_FFN_DIM: 3072
     DECODER_FFN_DIM: 3072
-    VOCAB_SIZE: 30000
+    MAX_POSITION_EMBEDDINGS: 514
+    NUM_ATTENTION_HEADS: 12
+    NUM_HIDDEN_LAYERS: 8
+    TYPE_VOCAB_SIZE: 1
+    optimizer: sgd
+    criterion: crossentropy
+    early_stopping_toggle: true
+    early_stopping_threshold: 5.0e-05
+    early_stopping_patience: 5
+    lr_sched: null
+  model_6:
+    HIDDEN_SIZE: 768
+    TRAIN_BATCH_SIZE: 16
+    VALID_BATCH_SIZE: 8
+    TRAIN_EPOCHS: 100
+    LEARNING_RATE: 5.0e-05
+    WEIGHT_DECAY: 0.01
+    MAX_LEN: 128
+    ENCODER_LAYERS: 12
+    DECODER_LAYERS: 12
+    NUM_ENCODER_ATTENTION_HEADS: 12
+    NUM_DECODER_ATTENTION_HEADS: 12
+    ENCODER_FFN_DIM: 3072
+    DECODER_FFN_DIM: 3072
+    MAX_POSITION_EMBEDDINGS: 514
+    NUM_ATTENTION_HEADS: 12
+    NUM_HIDDEN_LAYERS: 8
+    TYPE_VOCAB_SIZE: 1
+    optimizer: adam
+    criterion: crossentropy
+    early_stopping_toggle: true
+    early_stopping_threshold: 5.0e-05
+    early_stopping_patience: 5
+    lr_sched: ReduceLROnPlateau
+  model_7:
+    HIDDEN_SIZE: 768
+    TRAIN_BATCH_SIZE: 16
+    VALID_BATCH_SIZE: 8
+    TRAIN_EPOCHS: 100
+    LEARNING_RATE: 5.0e-05
+    WEIGHT_DECAY: 0.01
+    MAX_LEN: 128
+    ENCODER_LAYERS: 12
+    DECODER_LAYERS: 12
+    NUM_ENCODER_ATTENTION_HEADS: 12
+    NUM_DECODER_ATTENTION_HEADS: 12
+    ENCODER_FFN_DIM: 3072
+    DECODER_FFN_DIM: 3072
+    MAX_POSITION_EMBEDDINGS: 514
+    NUM_ATTENTION_HEADS: 12
+    NUM_HIDDEN_LAYERS: 8
+    TYPE_VOCAB_SIZE: 1
+    optimizer: adam
+    criterion: crossentropy
+    early_stopping_toggle: true
+    early_stopping_threshold: 5.0e-05
+    early_stopping_patience: 5
+    lr_sched: CyclicLR
+  model_8:
+    HIDDEN_SIZE: 768
+    TRAIN_BATCH_SIZE: 16
+    VALID_BATCH_SIZE: 8
+    TRAIN_EPOCHS: 100
+    LEARNING_RATE: 5.0e-05
+    WEIGHT_DECAY: 0.01
+    MAX_LEN: 128
+    ENCODER_LAYERS: 12
+    DECODER_LAYERS: 12
+    NUM_ENCODER_ATTENTION_HEADS: 12
+    NUM_DECODER_ATTENTION_HEADS: 12
+    ENCODER_FFN_DIM: 3072
+    DECODER_FFN_DIM: 3072
+    MAX_POSITION_EMBEDDINGS: 514
+    NUM_ATTENTION_HEADS: 12
+    NUM_HIDDEN_LAYERS: 8
+    TYPE_VOCAB_SIZE: 1
+    optimizer: adamw
+    criterion: crossentropy
+    early_stopping_toggle: true
+    early_stopping_threshold: 5.0e-05
+    early_stopping_patience: 5
+    lr_sched: ReduceLROnPlateau
+  model_orig:
+    HIDDEN_SIZE: 768
+    TRAIN_BATCH_SIZE: 16
+    VALID_BATCH_SIZE: 8
+    TRAIN_EPOCHS: 100
+    LEARNING_RATE: 5.0e-05
+    WEIGHT_DECAY: 0.01
+    MAX_LEN: 128
+    ENCODER_LAYERS: 12
+    DECODER_LAYERS: 12
+    NUM_ENCODER_ATTENTION_HEADS: 12
+    NUM_DECODER_ATTENTION_HEADS: 12
+    ENCODER_FFN_DIM: 3072
+    DECODER_FFN_DIM: 3072
     MAX_POSITION_EMBEDDINGS: 514
     NUM_ATTENTION_HEADS: 12
     NUM_HIDDEN_LAYERS: 8

@@ -667,29 +667,62 @@ def pretrain_BART(hyperparameters_dict, args, key):
     #     "adagrad": torch.optim.Adagrad,
     #     "adadelta": torch.optim.Adadelta
     # }
-    if optimizer_selection == "adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    elif optimizer_selection == "adamw":
-        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    elif optimizer_selection == "sgd":
-        optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
-    elif optimizer_selection == "adagrad":
-        optimizer = torch.optim.Adagrad(model.parameters(), lr=learning_rate)
-    elif optimizer_selection == "adadelta":
-        optimizer = torch.optim.Adadelta(model.parameters(), lr=learning_rate)
-    else:
-        raise ValueError(f"Invalid optimizer: {optimizer_selection}")
+    ### 04/21/2025 here
+    # if optimizer_selection == "adam":
+    #     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    # elif optimizer_selection == "adamw":
+    #     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    # elif optimizer_selection == "sgd":
+    #     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+    # elif optimizer_selection == "adagrad":
+    #     optimizer = torch.optim.Adagrad(model.parameters(), lr=learning_rate)
+    # elif optimizer_selection == "adadelta":
+    #     optimizer = torch.optim.Adadelta(model.parameters(), lr=learning_rate)
+    # else:
+    #     raise ValueError(f"Invalid optimizer: {optimizer_selection}")
+    ### 04/21/2025 here
 
     # optimizer = optimizers[optimizer_selection](model.parameters(), lr=learning_rate)
 
-    if learning_rate_scheduler_selection == "ReduceLROnPlateau":
-        lr_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min")
-    elif learning_rate_scheduler_selection == "LinearLR":
-        lr_sched = torch.optim.lr_scheduler.LinearLR(optimizer)
-    elif learning_rate_scheduler_selection is None:
-        lr_sched = None
-    else:
-        raise ValueError(f"Invalid lr scheduler: {learning_rate_scheduler_selection}")
+    # if learning_rate_scheduler_selection == "ReduceLROnPlateau":
+    #     lr_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min")
+    # elif learning_rate_scheduler_selection == "LinearLR":
+    #     lr_sched = torch.optim.lr_scheduler.LinearLR(optimizer)
+    # elif learning_rate_scheduler_selection is None:
+    #     lr_sched = None
+    # else:
+    #     raise ValueError(f"Invalid lr scheduler: {learning_rate_scheduler_selection}")
+
+    ### 04/21/2025 here
+    # if learning_rate_scheduler_selection == "ReduceLROnPlateau":
+    #     lr_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", patience=3, factor=0.1, verbose=True)
+
+    # elif learning_rate_scheduler_selection == "LinearLR":
+    #     lr_sched = torch.optim.lr_scheduler.LinearLR(optimizer)
+
+    # elif learning_rate_scheduler_selection == "StepLR":
+    #     lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+
+    # elif learning_rate_scheduler_selection == "MultiStepLR":
+    #     lr_sched = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30], gamma=0.5)
+
+    # elif learning_rate_scheduler_selection == "ExponentialLR":
+    #     lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+
+    # elif learning_rate_scheduler_selection == "CosineAnnealingLR":
+    #     lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
+
+    # elif learning_rate_scheduler_selection == "CyclicLR":
+    #     lr_sched = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=1e-3, step_size_up=5, mode='triangular2', cycle_momentum=False)
+
+    # elif learning_rate_scheduler_selection == "OneCycleLR":
+    #     lr_sched = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate, steps_per_epoch=len(pretrain_loader), epochs=num_epochs)
+
+    # elif learning_rate_scheduler_selection == "None" or learning_rate_scheduler_selection is None:
+    #     lr_sched = None
+    # else:
+    #     raise ValueError(f"Invalid lr scheduler: {learning_rate_scheduler_selection}")
+    ### 04/21/2025 here
 
     # if optimizer_selection == "adam":
     #     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -707,14 +740,14 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
     # TODO: NEW 03/11/2025: Work to utilize a LRScheduler (https://machinelearningmastery.com/using-learning-rate-schedule-in-pytorch-training/)
     # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
-    if learning_rate_scheduler_selection == "ReduceLROnPlateau":
-        lr_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min")
-    elif learning_rate_scheduler_selection == "LinearLR":
-        lr_sched = torch.optim.lr_scheduler.LinearLR(optimizer)
-    elif learning_rate_scheduler_selection is None:
-        lr_sched = None
-    else:
-        raise ValueError(f"Invalid optimizer: {learning_rate_scheduler_selection}")
+    # if learning_rate_scheduler_selection == "ReduceLROnPlateau":
+    #     lr_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min")
+    # elif learning_rate_scheduler_selection == "LinearLR":
+    #     lr_sched = torch.optim.lr_scheduler.LinearLR(optimizer)
+    # elif learning_rate_scheduler_selection is None:
+    #     lr_sched = None
+    # else:
+    #     raise ValueError(f"Invalid optimizer: {learning_rate_scheduler_selection}")
 
     """
     learning_rate_scheduler_selection = hyperparameters_dict[key]['lr_sched']
@@ -743,6 +776,48 @@ def pretrain_BART(hyperparameters_dict, args, key):
     # csv_file_path = f'./pretraining_loss__{filename_stub}.csv'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
+    if optimizer_selection == "adam":
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    elif optimizer_selection == "adamw":
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    elif optimizer_selection == "sgd":
+        optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+    elif optimizer_selection == "adagrad":
+        optimizer = torch.optim.Adagrad(model.parameters(), lr=learning_rate)
+    elif optimizer_selection == "adadelta":
+        optimizer = torch.optim.Adadelta(model.parameters(), lr=learning_rate)
+    else:
+        raise ValueError(f"Invalid optimizer: {optimizer_selection}")
+
+    if learning_rate_scheduler_selection == "ReduceLROnPlateau":
+        lr_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", patience=3, factor=0.1, verbose=True)
+
+    elif learning_rate_scheduler_selection == "LinearLR":
+        lr_sched = torch.optim.lr_scheduler.LinearLR(optimizer)
+
+    elif learning_rate_scheduler_selection == "StepLR":
+        lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+
+    elif learning_rate_scheduler_selection == "MultiStepLR":
+        lr_sched = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30], gamma=0.5)
+
+    elif learning_rate_scheduler_selection == "ExponentialLR":
+        lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+
+    elif learning_rate_scheduler_selection == "CosineAnnealingLR":
+        lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
+
+    elif learning_rate_scheduler_selection == "CyclicLR":
+        lr_sched = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=1e-3, step_size_up=5, mode='triangular2', cycle_momentum=False)
+
+    elif learning_rate_scheduler_selection == "OneCycleLR":
+        lr_sched = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate, steps_per_epoch=len(pretrain_loader), epochs=num_epochs)
+
+    elif learning_rate_scheduler_selection == "None" or learning_rate_scheduler_selection is None:
+        lr_sched = None
+    else:
+        raise ValueError(f"Invalid lr scheduler: {learning_rate_scheduler_selection}")
+
     best_loss = float('inf')
     patience_counter = 0
 
@@ -840,6 +915,17 @@ def pretrain_BART(hyperparameters_dict, args, key):
             #         print(f"Early stopping triggered after epoch {epoch + 1}")
             #         break
 
+            if early_stopping_toggle:
+                if avg_val_loss < best_loss:
+                    best_loss = avg_val_loss
+                    patience_counter = 0
+                else:
+                    patience_counter += 1
+                if patience_counter >= early_stopping_patience:
+                    print(f"Early stopping triggered after epoch {epoch + 1}")
+                    break
+
+
         # torch.save(model.state_dict(), f'./selfies_BART_pretrained_{key}.pth')
         # model.save_pretrained(f'./selfies_BART_pretrained_{key}')
         # print(f"Model saved to ./selfies_BART_pretrained_{key}.pth")
@@ -848,12 +934,14 @@ def pretrain_BART(hyperparameters_dict, args, key):
         base_config = hyperparameters_dict[base_model_name]
         current_config = hyperparameters_dict[key]
         #TODO 04/14/2025 need to readjust the models and establish a base model here! This will be good!
-        diffs = diff_to_string(base_config, current_config)
-        filename_stub = encode_differences_to_string(base_model_name, diffs)
+        # diffs = diff_to_string(base_config, current_config)
+        # filename_stub = encode_differences_to_string(base_model_name, diffs)
 
-        save_dir = f'./selfies_BART_pretrained__{filename_stub}'
-        model.save_pretrained(save_dir)
-        print(f"✅ Model saved to {save_dir}")
+        # save_dir = f'./selfies_BART_pretrained__{filename_stub}'
+        # model_save_dir = f'./selfies_BART_pretrained__{filename_stub}'
+
+        model.save_pretrained(model_save_dir)
+        print(f"✅ Model saved to {model_save_dir}")
 
 
 def main():
@@ -874,6 +962,9 @@ def main():
     print("BART hyperparameters:", bart_hyperparameters)
 
     for key in bart_hyperparameters.keys():
+        if key.startswith("skip_"):
+            continue
+
         if os.path.exists(f'./selfies_BART_pretrained_{key}.pth'):
             print("Model already exists! No need to retrain")
         else:
