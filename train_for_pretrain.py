@@ -572,8 +572,9 @@ def pretrain_BART(hyperparameters_dict, args, key):
     base_config = hyperparameters_dict[base_model_name]
     current_config = hyperparameters_dict[key]
 
-    diffs = diff_to_string(base_config, current_config)
-    filename_stub = encode_differences_to_string(base_model_name, diffs)
+    # diffs = diff_to_string(base_config, current_config)
+    filename_stub = encode_differences_to_string(base_model_name, base_config, current_config)
+    # filename_stub = encode_differences_to_string(base_model_name, diffs)
 
     model_save_dir = f'./selfies_BART_pretrained__{filename_stub}'
     csv_file_path = f'./pretraining_loss__{filename_stub}.csv'
@@ -858,7 +859,16 @@ def pretrain_BART(hyperparameters_dict, args, key):
                 loss.backward()
                 optimizer.step()
 
+            # After all the batchs are done
             avg_train_loss = total_train_loss / len(pretrain_loader)
+            # if lr_sched is not None and learning_rate_scheduler_selection == "ReduceLROnPlateau":
+            #     lr_sched.step(avg_train_loss)
+            # else:
+            #     lr_sched.step()
+            if isinstance(lr_sched, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                lr_sched.step(avg_train_loss)  # or any other metric you're monitoring
+            elif lr_sched is not None:
+                lr_sched.step()
 
             total_val_loss = 0
             model.eval()
@@ -894,12 +904,14 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
 # TODO: 04/10/2025 ENDED CODE HERE...
             # Adjust Learning Rate
-            if lr_sched is not None:
-                lr_sched.step()
+            #if lr_sched is not None:
+            #    lr_sched.step()
 
             print(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Validation Loss: {avg_val_loss}")
             if lr_sched is not None:
-                csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss, lr_sched.get_last_lr()])
+                # csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss, lr_sched.get_last_lr()])
+                current_lr = optimizer.param_groups[0]['lr']
+                csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss, current_lr])
             else:
                 csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss, "default"])
 

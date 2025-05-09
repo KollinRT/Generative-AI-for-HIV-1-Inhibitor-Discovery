@@ -7,7 +7,9 @@ def diff_to_string(base_config, other_config):
             diffs[key] = other_val
     return diffs
 
-def encode_differences_to_string(base_model_name, diffs):
+# def encode_differences_to_string(base_model_name, diffs):
+def encode_differences_to_string(base_model_name, base_config, other_config):
+    diffs = diff_to_string(base_config, other_config)
     parts = [base_model_name]
     for key, value in sorted(diffs.items()):
         safe_key = str(key).upper().replace(" ", "_")
