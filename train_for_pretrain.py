@@ -481,6 +481,7 @@ import os
 from generateFingerprints import make_fingerprint_thisthat
 from generateClusters import cluster_molecules
 from utils import diff_to_string, encode_differences_to_string
+from pytorch_lamb import Lamb
 
 
 def load_hyperparameters(path):
@@ -787,6 +788,8 @@ def pretrain_BART(hyperparameters_dict, args, key):
         optimizer = torch.optim.Adagrad(model.parameters(), lr=learning_rate)
     elif optimizer_selection == "adadelta":
         optimizer = torch.optim.Adadelta(model.parameters(), lr=learning_rate)
+    elif optimizer_selection == "lamb":
+        optimizer = Lamb(model.parameters(), lr=learning_rate)
     else:
         raise ValueError(f"Invalid optimizer: {optimizer_selection}")
 
