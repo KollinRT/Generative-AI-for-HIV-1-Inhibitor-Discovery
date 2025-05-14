@@ -472,7 +472,7 @@ from os.path import isfile
 from prepare_dataset import bpe_tokenizer, get_selfies_only, convert_to_selfies
 from SelfiesDataHandler import SelfiesDataset, collate_fn_pre, NNLossHandler
 from torch.utils.data import Dataset, DataLoader
-from transformers import BartForConditionalGeneration, BartConfig
+from transformers import BartForConditionalGeneration, BartConfig, PreTrainedTokenizerFast
 from tokenizers import Tokenizer
 import torch
 from tqdm import tqdm
@@ -514,11 +514,11 @@ def prepare_data(args, key):
         prepare_dataset_for_pretrain(f"./model_name_{key}.csv", f"./data/trainable_selfies_{key}.csv")
     print(f"File for training is ready! (trainable_selfies_{key}.csv)")
 
-    print("Creating BPE tokenizer.")
-    if not isfile(args.bpe_path + "/merges.txt"):
-        import prepare_dataset
-        prepare_dataset.bpe_tokenizer(path=args.prepared_data_path, save_to=args.bpe_path)
-    print("BPE Tokenizer is ready.")
+    # print("Creating BPE tokenizer.")
+    # if not isfile(args.bpe_path + "/merges.txt"):
+    #     import prepare_dataset
+    #     prepare_dataset.bpe_tokenizer(path=args.prepared_data_path, save_to=args.bpe_path)
+    # print("BPE Tokenizer is ready.")
 
 
 # === New: ClusteredSelfiesDataset ===
@@ -543,7 +543,7 @@ class ClusteredSelfiesDataset(Dataset):
         selfies_string = row['selfies']
         encoded = self.tokenizer.encode(selfies_string)
         if self.mode == 'pretrain':
-            return {'input_ids': torch.tensor(encoded.ids, dtype=torch.long)}
+            return {'input_ids': torch.tensor(encoded, dtype=torch.long)}
         elif self.mode == 'finetune':
             IC50 = row['IC50']
             inhibition_site = row['site_name']
@@ -605,15 +605,18 @@ def pretrain_BART(hyperparameters_dict, args, key):
     # )
 
     # Load the tokenizer + Loss handler
-    tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
-   
-    pad_token_id = tokenizer.token_to_id("<pad>")
+    # tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
+    tokenizer = PreTrainedTokenizerFast.from_pretrained("/home/kollin/Documents/new_hf")
+
+    # pad_token_id = tokenizer.token_to_id("<pad>")
+    pad_token_id = tokenizer.pad_token_id
+
     loss_handler = NNLossHandler(
         loss_name=hyperparameters_dict[key]['criterion'],
         early_stopping_toggle=early_stopping_toggle,
         early_stopping_threshold=early_stopping_threshold,
         early_stopping_patience=early_stopping_patience,
-        pad_token_id=pad_token_id  # <- Add this
+        pad_token_id = tokenizer.pad_token_id
     )
 
     # Load the tokenizer
@@ -645,7 +648,7 @@ def pretrain_BART(hyperparameters_dict, args, key):
     val_loader = DataLoader(valid_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn_pre)
 
     config = BartConfig(
-        vocab_size=tokenizer.get_vocab_size(),
+        vocab_size=tokenizer.vocab_size,
         max_position_embeddings=hyperparameters_dict[key]["MAX_POSITION_EMBEDDINGS"],
         encoder_layers=hyperparameters_dict[key]["ENCODER_LAYERS"],
         decoder_layers=hyperparameters_dict[key]["DECODER_LAYERS"],
@@ -654,10 +657,10 @@ def pretrain_BART(hyperparameters_dict, args, key):
         encoder_ffn_dim=hyperparameters_dict[key]["ENCODER_FFN_DIM"],
         decoder_ffn_dim=hyperparameters_dict[key]["DECODER_FFN_DIM"],
         hidden_size=hyperparameters_dict[key]["HIDDEN_SIZE"],
-        pad_token_id=tokenizer.token_to_id("<pad>"),
-        bos_token_id=tokenizer.token_to_id("<s>"),
-        eos_token_id=tokenizer.token_to_id("</s>"),
-        mask_token_id=tokenizer.token_to_id("<mask>")
+        pad_token_id = tokenizer.pad_token_id,
+        bos_token_id=tokenizer.bos_token_id,
+        eos_token_id=tokenizer.eos_token_id,
+        mask_token_id=tokenizer.mask_token_id
     )
     model = BartForConditionalGeneration(config)
 
@@ -987,7 +990,7 @@ def main():
             print(args.smiles_dataset)
             args.selfies_dataset = f"./data/molecule_data_{key}.csv"
             args.prepared_data_path = f"./data/prepared_selfies_{key}.txt"
-            args.bpe_path = f"./data/bpe_filter_{key}/"
+            # args.bpe_path = f"./data/bpe_filter_{key}/"
 
             prepare_data(args, key)
             pretrain_BART(bart_hyperparameters, args, key)
