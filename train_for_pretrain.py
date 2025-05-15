@@ -606,7 +606,7 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
     # Load the tokenizer + Loss handler
     # tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
-    tokenizer = PreTrainedTokenizerFast.from_pretrained("/home/kollin/Documents/new_hf")
+    tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer")
 
     # pad_token_id = tokenizer.token_to_id("<pad>")
     pad_token_id = tokenizer.pad_token_id
@@ -840,13 +840,19 @@ def pretrain_BART(hyperparameters_dict, args, key):
                 attention_mask = batch['attention_mask'].to(device)
 
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
-                # logits = outputs.logits
-                # target = input_ids
-                #
-                # logits = logits.view(-1, logits.size(-1))
-                # target = target.view(-1)
-                logits = outputs.logits.view(-1, outputs.logits.size(-1))
-                target = input_ids.view(-1)
+                # print("→ HF’s 🤗 loss:", outputs.loss)
+                # # logits = outputs.logits
+                # # target = input_ids
+                # #
+                # # logits = logits.view(-1, logits.size(-1))
+                # # target = target.view(-1)
+                # logits = outputs.logits.view(-1, outputs.logits.size(-1))
+                # target = input_ids.view(-1)
+                loss = outputs.loss
+                # total_train_loss += loss.item()
+                loss.backward()
+                optimizer.step()
+                total_train_loss += loss.item()
 
 
                 # 👇 Add this logging before loss calculation
@@ -854,16 +860,20 @@ def pretrain_BART(hyperparameters_dict, args, key):
                     print("🔍 First batch input shape:", input_ids.shape)
                     print("🔍 First input_ids example:", input_ids[0][:20])
                     print("🔍 PAD token ID:", pad_token_id)
-                    lengths = (input_ids != pad_token_id).sum(dim=1)
+                    print("pad_token_id:", tokenizer.pad_token_id)
+                    print("unk_token_id:", tokenizer.unk_token_id)
+                    print("bos_token_id:", tokenizer.bos_token_id)
+                    print("eos_token_id:", tokenizer.eos_token_id)
+                    lengths = (input_ids != tokenizer.pad_token_id).sum(dim=1)
                     print("🔍 Non-padding lengths:", lengths.tolist())
                     print("🔍 Avg length:", lengths.float().mean().item())
 
-                loss = loss_handler.compute_loss(logits, target)
-                total_train_loss += loss.item()
+                # loss = loss_handler.compute_loss(logits, target)
+                # total_train_loss += loss.item()
 
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+                # optimizer.zero_grad()
+                # loss.backward()
+                # optimizer.step()
 
             # After all the batchs are done
             avg_train_loss = total_train_loss / len(pretrain_loader)
@@ -885,7 +895,7 @@ def pretrain_BART(hyperparameters_dict, args, key):
                     for batch in val_loader:
                         print("🔎 Validation batch input shape:", batch['input_ids'].shape)
                         print("🔎 First validation input:", batch['input_ids'][0][:20])
-                        lengths = (batch['input_ids'] != pad_token_id).sum(dim=1)
+                        lengths = (batch['input_ids'] != tokenizer.pad_token_id).sum(dim=1)
                         print("🔎 Val input lengths:", lengths.tolist())
                         print("🔎 Avg val length:", lengths.float().mean().item())
                         break  # Just one batch
@@ -894,17 +904,23 @@ def pretrain_BART(hyperparameters_dict, args, key):
                     input_ids = batch['input_ids'].to(device)
                     attention_mask = batch['attention_mask'].to(device)
                     outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+                    # print("→ HF’s 🤗 loss:", outputs.loss)
                     # logits = outputs.logits
                     # target = input_ids
                     #
                     # logits = logits.view(-1, logits.size(-1))
                     # target = target.view(-1)
-                    logits = outputs.logits.view(-1, outputs.logits.size(-1))
-                    target = input_ids.view(-1)
-
-
-                    val_loss = loss_handler.compute_loss(logits, target)
-                    total_val_loss += val_loss.item()
+                    # logits = outputs.logits.view(-1, outputs.logits.size(-1))
+                    # target = input_ids.view(-1)
+                    # loss = outputs.loss
+                    # loss.backward()
+                    # optimizer.step()
+                    # val_loss = loss_handler.compute_loss(logits, target)
+                    # total_val_loss += val_loss.item()
+                    # loss = outputs.loss
+                    total_val_loss += loss.item()
+                    # loss.backward()
+                    # optimizer.step()
 
             avg_val_loss = total_val_loss / len(val_loader)
 
