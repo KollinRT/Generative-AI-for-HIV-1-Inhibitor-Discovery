@@ -482,6 +482,225 @@ from generateFingerprints import make_fingerprint_thisthat
 from generateClusters import cluster_molecules
 from utils import diff_to_string, encode_differences_to_string
 from pytorch_lamb import Lamb
+from transformers import (
+    get_linear_schedule_with_warmup,
+    get_cosine_schedule_with_warmup,
+)
+from torch.nn.utils import clip_grad_norm_
+
+# def make_optimizer(model, cfg):
+#     lr = cfg["LEARNING_RATE"]
+#     opt = cfg["optimizer"].lower()
+#     if   opt == "adam":   return torch.optim.Adam(model.parameters(), lr=lr)
+#     elif opt == "adamw":  return torch.optim.AdamW(model.parameters(), lr=lr)
+#     elif opt == "lamb":   return Lamb(model.parameters(), lr=lr)
+#     elif opt == "sgd":    return torch.optim.SGD(model.parameters(), lr=lr)
+#     elif opt == "adagrad":return torch.optim.Adagrad(model.parameters(), lr=lr)
+#     elif opt == "adadelta":return torch.optim.Adadelta(model.parameters(), lr=lr)
+#     else: raise ValueError(f"Unknown optimizer: {opt}")
+#
+# def make_scheduler(optimizer, cfg, train_steps_per_epoch, num_epochs):
+#     lr_cfg = cfg.get("lr_sched", None)
+#     if not isinstance(lr_cfg, dict):
+#         return None
+#
+#     sched_type = lr_cfg["type"].lower()
+#     warmup_steps = int(train_steps_per_epoch * num_epochs * lr_cfg.get("warmup_ratio", 0.0))
+#     total_steps  = train_steps_per_epoch * num_epochs
+#
+#     if sched_type == "linear":
+#         return get_linear_schedule_with_warmup(optimizer, warmup_steps, total_steps)
+#     elif sched_type == "cosine":
+#         return get_cosine_schedule_with_warmup(optimizer, warmup_steps, total_steps)
+#     elif sched_type == "steplr":
+#         return torch.optim.lr_scheduler.StepLR(optimizer, step_size=lr_cfg.get("step_size",10), gamma=lr_cfg.get("gamma",0.1))
+#     elif sched_type == "multisteplr":
+#         return torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=lr_cfg.get("milestones",[10,20,30]), gamma=lr_cfg.get("gamma",0.5))
+#     elif sched_type == "exponential":
+#         return torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=lr_cfg.get("gamma",0.9))
+#     elif sched_type == "reducelronplateau":
+#         return torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
+#                                                           mode="min",
+#                                                           patience=lr_cfg.get("patience",3),
+#                                                           factor=lr_cfg.get("factor",0.1),
+#                                                           verbose=True)
+#     elif sched_type == "cyclic":
+#         return torch.optim.lr_scheduler.CyclicLR(optimizer,
+#                                                  base_lr=lr_cfg.get("base_lr",1e-5),
+#                                                  max_lr=lr_cfg.get("max_lr",1e-3),
+#                                                  step_size_up=lr_cfg.get("step_size_up",5),
+#                                                  mode=lr_cfg.get("mode","triangular2"),
+#                                                  cycle_momentum=False)
+#     elif sched_type == "onecycle":
+#         return torch.optim.lr_scheduler.OneCycleLR(optimizer,
+#                                                    max_lr=cfg["LEARNING_RATE"],
+#                                                    steps_per_epoch=train_steps_per_epoch,
+#                                                    epochs=num_epochs)
+#     else:
+#         raise ValueError(f"Unknown scheduler type: {sched_type}")
+
+import os
+import torch
+from torch.nn.utils import clip_grad_norm_
+from transformers import (
+    get_linear_schedule_with_warmup,
+    get_cosine_schedule_with_warmup,
+)
+from pytorch_lamb import Lamb
+
+
+def make_optimizer(model, cfg):
+    lr = cfg["LEARNING_RATE"]
+    opt = cfg["optimizer"].lower()
+    if opt == "adam":
+        return torch.optim.Adam(model.parameters(), lr=lr)
+    elif opt == "adamw":
+        return torch.optim.AdamW(model.parameters(), lr=lr)
+    elif opt == "lamb":
+        return Lamb(model.parameters(), lr=lr)
+    elif opt == "sgd":
+        return torch.optim.SGD(model.parameters(), lr=lr)
+    elif opt == "adagrad":
+        return torch.optim.Adagrad(model.parameters(), lr=lr)
+    elif opt == "adadelta":
+        return torch.optim.Adadelta(model.parameters(), lr=lr)
+    else:
+        raise ValueError(f"Unknown optimizer: {opt}")
+
+
+def make_scheduler(optimizer, cfg, train_steps_per_epoch, num_epochs):
+    lr_cfg = cfg.get("lr_sched", None)
+    if not isinstance(lr_cfg, dict):
+        return None
+
+    sched_type = lr_cfg["type"].lower()
+    warmup_steps = int(train_steps_per_epoch * num_epochs * lr_cfg.get("warmup_ratio", 0.0))
+    total_steps = train_steps_per_epoch * num_epochs
+
+    if sched_type == "linear":
+        return get_linear_schedule_with_warmup(optimizer, warmup_steps, total_steps)
+    elif sched_type == "cosine":
+        return get_cosine_schedule_with_warmup(optimizer, warmup_steps, total_steps)
+    elif sched_type == "steplr":
+        return torch.optim.lr_scheduler.StepLR(optimizer, step_size=lr_cfg.get("step_size", 10),
+                                               gamma=lr_cfg.get("gamma", 0.1))
+    elif sched_type == "multisteplr":
+        return torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=lr_cfg.get("milestones", [10, 20, 30]),
+                                                    gamma=lr_cfg.get("gamma", 0.5))
+    elif sched_type == "exponential":
+        return torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=lr_cfg.get("gamma", 0.9))
+    elif sched_type == "reducelronplateau":
+        return torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
+                                                          mode="min",
+                                                          patience=lr_cfg.get("patience", 3),
+                                                          factor=lr_cfg.get("factor", 0.1),
+                                                          verbose=True)
+    elif sched_type == "cyclic":
+        return torch.optim.lr_scheduler.CyclicLR(optimizer,
+                                                 base_lr=lr_cfg.get("base_lr", 1e-5),
+                                                 max_lr=lr_cfg.get("max_lr", 1e-3),
+                                                 step_size_up=lr_cfg.get("step_size_up", 5),
+                                                 mode=lr_cfg.get("mode", "triangular2"),
+                                                 cycle_momentum=False)
+    elif sched_type == "onecycle":
+        return torch.optim.lr_scheduler.OneCycleLR(optimizer,
+                                                   max_lr=cfg["LEARNING_RATE"],
+                                                   steps_per_epoch=train_steps_per_epoch,
+                                                   epochs=num_epochs)
+    else:
+        raise ValueError(f"Unknown scheduler type: {sched_type}")
+
+
+def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_path):
+    """
+    model        : a BartForConditionalGeneration
+    train_loader : DataLoader for pretrain set
+    val_loader   : DataLoader for validation set
+    cfg          : one of your hyperparameter dicts (e.g. hyperparameters_dict[key])
+    save_dir     : where to save the best model
+    csv_file_path: writes to the designated csv_file_path
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    # csv_path = os.path.join(save_dir, "training_log.csv")
+    # csv_file = open(csv_path, "w", newline="")
+    csv_file = open(csv_file_path, "w", newline="")
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow(["epoch", "train_loss", "val_loss", "learning_rate"])
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+
+    optimizer = make_optimizer(model, cfg)
+    scheduler = make_scheduler(optimizer, cfg, len(train_loader), cfg["TRAIN_EPOCHS"])
+
+    best_val_loss = float('inf')
+    patience = 0
+    thresh = cfg["early_stopping_threshold"]
+    max_patience = cfg["early_stopping_patience"]
+
+    for epoch in range(1, cfg["TRAIN_EPOCHS"] + 1):
+        # Training
+        model.train()
+        total_train_loss = 0.0
+        # for batch in train_loader:
+        for batch in tqdm(train_loader, desc=f"Epoch {epoch} [train]"):
+            batch = {k: v.to(device) for k, v in batch.items()}
+            outputs = model(input_ids=batch['input_ids'],
+                            attention_mask=batch['attention_mask'],
+                            labels=batch['input_ids'])
+            loss = outputs.loss
+            loss.backward()
+            clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            if scheduler and isinstance(scheduler, torch.optim.lr_scheduler.OneCycleLR):
+                scheduler.step()
+            optimizer.zero_grad()
+            total_train_loss += loss.item()
+
+        avg_train_loss = total_train_loss / len(train_loader)
+
+        # Validation
+        model.eval()
+        total_val_loss = 0.0
+        with torch.no_grad():
+            # for batch in val_loader:
+            for batch in tqdm(val_loader, desc=f"Epoch {epoch} [val]"):
+                batch = {k: v.to(device) for k, v in batch.items()}
+                loss = model(input_ids=batch['input_ids'],
+                             attention_mask=batch['attention_mask'],
+                             labels=batch['input_ids']).loss
+                total_val_loss += loss.item()
+
+        avg_val_loss = total_val_loss / len(val_loader)
+
+        # Scheduler step
+        if scheduler:
+            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                scheduler.step(avg_val_loss)
+            elif not isinstance(scheduler, torch.optim.lr_scheduler.OneCycleLR):
+                scheduler.step()
+
+        #     Logging
+        current_lr = optimizer.param_groups[0]['lr']
+        print(f"[Epoch {epoch}] train_loss={avg_train_loss:.4f}  "
+              f"val_loss={avg_val_loss:.4f}  lr={current_lr:.2E}")
+        csv_writer.writerow([epoch, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
+        csv_file.flush()
+
+        #     Early Stopping & Save
+        if avg_val_loss < best_val_loss - thresh:
+            best_val_loss = avg_val_loss
+            patience = 0
+            model.save_pretrained(save_dir)
+            print(f"??  New best model saved at epoch {epoch}")
+        else:
+            patience += 1
+            if patience >= max_patience:
+                print(f"? Early stopping (no improvement in {max_patience} epochs)")
+                break
+
+    # close the CSV file now that training (or early stop) is done
+    csv_file.close()
 
 
 def load_hyperparameters(path):
@@ -580,7 +799,6 @@ def pretrain_BART(hyperparameters_dict, args, key):
     model_save_dir = f'./selfies_BART_pretrained__{filename_stub}'
     csv_file_path = f'./pretraining_loss__{filename_stub}.csv'
 
-
     # Define Training Hyperparameters
     num_epochs = hyperparameters_dict[key]['TRAIN_EPOCHS']
     learning_rate = hyperparameters_dict[key]['LEARNING_RATE']
@@ -616,11 +834,11 @@ def pretrain_BART(hyperparameters_dict, args, key):
         early_stopping_toggle=early_stopping_toggle,
         early_stopping_threshold=early_stopping_threshold,
         early_stopping_patience=early_stopping_patience,
-        pad_token_id = tokenizer.pad_token_id
+        pad_token_id=tokenizer.pad_token_id
     )
 
     # Load the tokenizer
-    #tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
+    # tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
 
     # Load DF and Cluster
     # Load and process the DataFrame: apply fingerprinting and clustering
@@ -657,12 +875,15 @@ def pretrain_BART(hyperparameters_dict, args, key):
         encoder_ffn_dim=hyperparameters_dict[key]["ENCODER_FFN_DIM"],
         decoder_ffn_dim=hyperparameters_dict[key]["DECODER_FFN_DIM"],
         hidden_size=hyperparameters_dict[key]["HIDDEN_SIZE"],
-        pad_token_id = tokenizer.pad_token_id,
+        pad_token_id=tokenizer.pad_token_id,
         bos_token_id=tokenizer.bos_token_id,
         eos_token_id=tokenizer.eos_token_id,
         mask_token_id=tokenizer.mask_token_id
     )
     model = BartForConditionalGeneration(config)
+
+    # save_dir = model_save_dir
+    # cfg = hyperparameters_dict[key]
 
     # === [5] OPTIMIZER & LR SCHEDULER ===
     # optimizers = {
@@ -742,7 +963,6 @@ def pretrain_BART(hyperparameters_dict, args, key):
     # else:
     #     raise ValueError(f"Invalid optimizer: {optimizer_selection}")
 
-
     # TODO: NEW 03/11/2025: Work to utilize a LRScheduler (https://machinelearningmastery.com/using-learning-rate-schedule-in-pytorch-training/)
     # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
     # if learning_rate_scheduler_selection == "ReduceLROnPlateau":
@@ -765,12 +985,11 @@ def pretrain_BART(hyperparameters_dict, args, key):
         lr_sched = None  # Do not use any scheduler
     else:
         raise ValueError(f"Invalid optimizer: {learning_rate_scheduler_selection}")
-        
+
     # Apply the learning rate scheduler only if it's set IN THE TRAINING LOOP!
     if lr_sched is not None:
         lr_sched.step()
     """
-
 
     # Print DataFrame info for debugging
     print("Final training DataFrame:")
@@ -779,204 +998,204 @@ def pretrain_BART(hyperparameters_dict, args, key):
     # Training Loop START
     # csv_file_path = f'./pretraining_loss_{key}.csv'
     # csv_file_path = f'./pretraining_loss__{filename_stub}.csv'
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
-    if optimizer_selection == "adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    elif optimizer_selection == "adamw":
-        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    elif optimizer_selection == "sgd":
-        optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
-    elif optimizer_selection == "adagrad":
-        optimizer = torch.optim.Adagrad(model.parameters(), lr=learning_rate)
-    elif optimizer_selection == "adadelta":
-        optimizer = torch.optim.Adadelta(model.parameters(), lr=learning_rate)
-    elif optimizer_selection == "lamb":
-        optimizer = Lamb(model.parameters(), lr=learning_rate)
-    else:
-        raise ValueError(f"Invalid optimizer: {optimizer_selection}")
-
-    if learning_rate_scheduler_selection == "ReduceLROnPlateau":
-        lr_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", patience=3, factor=0.1, verbose=True)
-
-    elif learning_rate_scheduler_selection == "LinearLR":
-        lr_sched = torch.optim.lr_scheduler.LinearLR(optimizer)
-
-    elif learning_rate_scheduler_selection == "StepLR":
-        lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
-
-    elif learning_rate_scheduler_selection == "MultiStepLR":
-        lr_sched = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30], gamma=0.5)
-
-    elif learning_rate_scheduler_selection == "ExponentialLR":
-        lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-
-    elif learning_rate_scheduler_selection == "CosineAnnealingLR":
-        lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
-
-    elif learning_rate_scheduler_selection == "CyclicLR":
-        lr_sched = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=1e-3, step_size_up=5, mode='triangular2', cycle_momentum=False)
-
-    elif learning_rate_scheduler_selection == "OneCycleLR":
-        lr_sched = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate, steps_per_epoch=len(pretrain_loader), epochs=num_epochs)
-
-    elif learning_rate_scheduler_selection == "None" or learning_rate_scheduler_selection is None:
-        lr_sched = None
-    else:
-        raise ValueError(f"Invalid lr scheduler: {learning_rate_scheduler_selection}")
-
-    best_loss = float('inf')
-    patience_counter = 0
-
-    with open(csv_file_path, mode='w', newline='') as csv_file:
-        csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(['Epoch', 'Train Loss', 'Validation Loss', 'learning_rate'])
-
-        model.train()
-        for epoch in range(num_epochs):
-            total_train_loss = 0
-            for batch in tqdm(pretrain_loader):
-                input_ids = batch['input_ids'].to(device)
-                attention_mask = batch['attention_mask'].to(device)
-
-                outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
-                # print("→ HF’s 🤗 loss:", outputs.loss)
-                # # logits = outputs.logits
-                # # target = input_ids
-                # #
-                # # logits = logits.view(-1, logits.size(-1))
-                # # target = target.view(-1)
-                # logits = outputs.logits.view(-1, outputs.logits.size(-1))
-                # target = input_ids.view(-1)
-                loss = outputs.loss
-                # total_train_loss += loss.item()
-                loss.backward()
-                optimizer.step()
-                total_train_loss += loss.item()
-
-
-                # 👇 Add this logging before loss calculation
-                if epoch == 0 and total_train_loss == 0:  # Only print once
-                    print("🔍 First batch input shape:", input_ids.shape)
-                    print("🔍 First input_ids example:", input_ids[0][:20])
-                    print("🔍 PAD token ID:", pad_token_id)
-                    print("pad_token_id:", tokenizer.pad_token_id)
-                    print("unk_token_id:", tokenizer.unk_token_id)
-                    print("bos_token_id:", tokenizer.bos_token_id)
-                    print("eos_token_id:", tokenizer.eos_token_id)
-                    lengths = (input_ids != tokenizer.pad_token_id).sum(dim=1)
-                    print("🔍 Non-padding lengths:", lengths.tolist())
-                    print("🔍 Avg length:", lengths.float().mean().item())
-
-                # loss = loss_handler.compute_loss(logits, target)
-                # total_train_loss += loss.item()
-
-                # optimizer.zero_grad()
-                # loss.backward()
-                # optimizer.step()
-
-            # After all the batchs are done
-            avg_train_loss = total_train_loss / len(pretrain_loader)
-            # if lr_sched is not None and learning_rate_scheduler_selection == "ReduceLROnPlateau":
-            #     lr_sched.step(avg_train_loss)
-            # else:
-            #     lr_sched.step()
-            if isinstance(lr_sched, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                lr_sched.step(avg_train_loss)  # or any other metric you're monitoring
-            elif lr_sched is not None:
-                lr_sched.step()
-
-            total_val_loss = 0
-            model.eval()
-
-            with torch.no_grad():
-                # Debug val input batch (just once)
-                if epoch == 0:
-                    for batch in val_loader:
-                        print("🔎 Validation batch input shape:", batch['input_ids'].shape)
-                        print("🔎 First validation input:", batch['input_ids'][0][:20])
-                        lengths = (batch['input_ids'] != tokenizer.pad_token_id).sum(dim=1)
-                        print("🔎 Val input lengths:", lengths.tolist())
-                        print("🔎 Avg val length:", lengths.float().mean().item())
-                        break  # Just one batch
-
-                for batch in tqdm(val_loader):
-                    input_ids = batch['input_ids'].to(device)
-                    attention_mask = batch['attention_mask'].to(device)
-                    outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
-                    # print("→ HF’s 🤗 loss:", outputs.loss)
-                    # logits = outputs.logits
-                    # target = input_ids
-                    #
-                    # logits = logits.view(-1, logits.size(-1))
-                    # target = target.view(-1)
-                    # logits = outputs.logits.view(-1, outputs.logits.size(-1))
-                    # target = input_ids.view(-1)
-                    # loss = outputs.loss
-                    # loss.backward()
-                    # optimizer.step()
-                    # val_loss = loss_handler.compute_loss(logits, target)
-                    # total_val_loss += val_loss.item()
-                    # loss = outputs.loss
-                    total_val_loss += loss.item()
-                    # loss.backward()
-                    # optimizer.step()
-
-            avg_val_loss = total_val_loss / len(val_loader)
-
-# TODO: 04/10/2025 ENDED CODE HERE...
-            # Adjust Learning Rate
-            #if lr_sched is not None:
-            #    lr_sched.step()
-
-            print(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Validation Loss: {avg_val_loss}")
-            if lr_sched is not None:
-                # csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss, lr_sched.get_last_lr()])
-                current_lr = optimizer.param_groups[0]['lr']
-                csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss, current_lr])
-            else:
-                csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss, "default"])
-
-            csv_file.flush()
-
-            # if early_stopping_toggle:
-            #     if avg_val_loss < best_loss:
-            #         best_loss = avg_val_loss
-            #         patience_counter = 0
-            #     else:
-            #         patience_counter += 1
-            #     if patience_counter >= early_stopping_patience:
-            #         print(f"Early stopping triggered after epoch {epoch + 1}")
-            #         break
-
-            if early_stopping_toggle:
-                if avg_val_loss < best_loss:
-                    best_loss = avg_val_loss
-                    patience_counter = 0
-                else:
-                    patience_counter += 1
-                if patience_counter >= early_stopping_patience:
-                    print(f"Early stopping triggered after epoch {epoch + 1}")
-                    break
-
-
-        # torch.save(model.state_dict(), f'./selfies_BART_pretrained_{key}.pth')
-        # model.save_pretrained(f'./selfies_BART_pretrained_{key}')
-        # print(f"Model saved to ./selfies_BART_pretrained_{key}.pth")
-        # Assume base model is defined at top level (you can pass it in or hardcode if needed)
-        base_model_name = "skip_base"  # <- Change if needed
-        base_config = hyperparameters_dict[base_model_name]
-        current_config = hyperparameters_dict[key]
-        #TODO 04/14/2025 need to readjust the models and establish a base model here! This will be good!
-        # diffs = diff_to_string(base_config, current_config)
-        # filename_stub = encode_differences_to_string(base_model_name, diffs)
-
-        # save_dir = f'./selfies_BART_pretrained__{filename_stub}'
-        # model_save_dir = f'./selfies_BART_pretrained__{filename_stub}'
-
-        model.save_pretrained(model_save_dir)
-        print(f"✅ Model saved to {model_save_dir}")
-
+    #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #     model.to(device)
+    #     if optimizer_selection == "adam":
+    #         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    #     elif optimizer_selection == "adamw":
+    #         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    #     elif optimizer_selection == "sgd":
+    #         optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+    #     elif optimizer_selection == "adagrad":
+    #         optimizer = torch.optim.Adagrad(model.parameters(), lr=learning_rate)
+    #     elif optimizer_selection == "adadelta":
+    #         optimizer = torch.optim.Adadelta(model.parameters(), lr=learning_rate)
+    #     elif optimizer_selection == "lamb":
+    #         optimizer = Lamb(model.parameters(), lr=learning_rate)
+    #     else:
+    #         raise ValueError(f"Invalid optimizer: {optimizer_selection}")
+    #
+    #     if learning_rate_scheduler_selection == "ReduceLROnPlateau":
+    #         lr_sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", patience=3, factor=0.1, verbose=True)
+    #
+    #     elif learning_rate_scheduler_selection == "LinearLR":
+    #         lr_sched = torch.optim.lr_scheduler.LinearLR(optimizer)
+    #
+    #     elif learning_rate_scheduler_selection == "StepLR":
+    #         lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+    #
+    #     elif learning_rate_scheduler_selection == "MultiStepLR":
+    #         lr_sched = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30], gamma=0.5)
+    #
+    #     elif learning_rate_scheduler_selection == "ExponentialLR":
+    #         lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+    #
+    #     elif learning_rate_scheduler_selection == "CosineAnnealingLR":
+    #         lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
+    #
+    #     elif learning_rate_scheduler_selection == "CyclicLR":
+    #         lr_sched = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=1e-3, step_size_up=5, mode='triangular2', cycle_momentum=False)
+    #
+    #     elif learning_rate_scheduler_selection == "OneCycleLR":
+    #         lr_sched = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate, steps_per_epoch=len(pretrain_loader), epochs=num_epochs)
+    #
+    #     elif learning_rate_scheduler_selection == "None" or learning_rate_scheduler_selection is None:
+    #         lr_sched = None
+    #     else:
+    #         raise ValueError(f"Invalid lr scheduler: {learning_rate_scheduler_selection}")
+    #
+    #     best_loss = float('inf')
+    #     patience_counter = 0
+    #
+    #     with open(csv_file_path, mode='w', newline='') as csv_file:
+    #         csv_writer = csv.writer(csv_file)
+    #         csv_writer.writerow(['Epoch', 'Train Loss', 'Validation Loss', 'learning_rate'])
+    #
+    #         model.train()
+    #         for epoch in range(num_epochs):
+    #             total_train_loss = 0
+    #             for batch in tqdm(pretrain_loader):
+    #                 input_ids = batch['input_ids'].to(device)
+    #                 attention_mask = batch['attention_mask'].to(device)
+    #
+    #                 outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+    #                 # print("→ HF’s 🤗 loss:", outputs.loss)
+    #                 # # logits = outputs.logits
+    #                 # # target = input_ids
+    #                 # #
+    #                 # # logits = logits.view(-1, logits.size(-1))
+    #                 # # target = target.view(-1)
+    #                 # logits = outputs.logits.view(-1, outputs.logits.size(-1))
+    #                 # target = input_ids.view(-1)
+    #                 loss = outputs.loss
+    #                 # total_train_loss += loss.item()
+    #                 loss.backward()
+    #                 optimizer.step()
+    #                 total_train_loss += loss.item()
+    #
+    #
+    #                 # 👇 Add this logging before loss calculation
+    #                 if epoch == 0 and total_train_loss == 0:  # Only print once
+    #                     print("🔍 First batch input shape:", input_ids.shape)
+    #                     print("🔍 First input_ids example:", input_ids[0][:20])
+    #                     print("🔍 PAD token ID:", pad_token_id)
+    #                     print("pad_token_id:", tokenizer.pad_token_id)
+    #                     print("unk_token_id:", tokenizer.unk_token_id)
+    #                     print("bos_token_id:", tokenizer.bos_token_id)
+    #                     print("eos_token_id:", tokenizer.eos_token_id)
+    #                     lengths = (input_ids != tokenizer.pad_token_id).sum(dim=1)
+    #                     print("🔍 Non-padding lengths:", lengths.tolist())
+    #                     print("🔍 Avg length:", lengths.float().mean().item())
+    #
+    #                 # loss = loss_handler.compute_loss(logits, target)
+    #                 # total_train_loss += loss.item()
+    #
+    #                 # optimizer.zero_grad()
+    #                 # loss.backward()
+    #                 # optimizer.step()
+    #
+    #             # After all the batchs are done
+    #             avg_train_loss = total_train_loss / len(pretrain_loader)
+    #             # if lr_sched is not None and learning_rate_scheduler_selection == "ReduceLROnPlateau":
+    #             #     lr_sched.step(avg_train_loss)
+    #             # else:
+    #             #     lr_sched.step()
+    #             if isinstance(lr_sched, torch.optim.lr_scheduler.ReduceLROnPlateau):
+    #                 lr_sched.step(avg_train_loss)  # or any other metric you're monitoring
+    #             elif lr_sched is not None:
+    #                 lr_sched.step()
+    #
+    #             total_val_loss = 0
+    #             model.eval()
+    #
+    #             with torch.no_grad():
+    #                 # Debug val input batch (just once)
+    #                 if epoch == 0:
+    #                     for batch in val_loader:
+    #                         print("🔎 Validation batch input shape:", batch['input_ids'].shape)
+    #                         print("🔎 First validation input:", batch['input_ids'][0][:20])
+    #                         lengths = (batch['input_ids'] != tokenizer.pad_token_id).sum(dim=1)
+    #                         print("🔎 Val input lengths:", lengths.tolist())
+    #                         print("🔎 Avg val length:", lengths.float().mean().item())
+    #                         break  # Just one batch
+    #
+    #                 for batch in tqdm(val_loader):
+    #                     input_ids = batch['input_ids'].to(device)
+    #                     attention_mask = batch['attention_mask'].to(device)
+    #                     outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=input_ids)
+    #                     # print("→ HF’s 🤗 loss:", outputs.loss)
+    #                     # logits = outputs.logits
+    #                     # target = input_ids
+    #                     #
+    #                     # logits = logits.view(-1, logits.size(-1))
+    #                     # target = target.view(-1)
+    #                     # logits = outputs.logits.view(-1, outputs.logits.size(-1))
+    #                     # target = input_ids.view(-1)
+    #                     # loss = outputs.loss
+    #                     # loss.backward()
+    #                     # optimizer.step()
+    #                     # val_loss = loss_handler.compute_loss(logits, target)
+    #                     # total_val_loss += val_loss.item()
+    #                     # loss = outputs.loss
+    #                     total_val_loss += loss.item()
+    #                     # loss.backward()
+    #                     # optimizer.step()
+    #
+    #             avg_val_loss = total_val_loss / len(val_loader)
+    #
+    # # TODO: 04/10/2025 ENDED CODE HERE...
+    #             # Adjust Learning Rate
+    #             #if lr_sched is not None:
+    #             #    lr_sched.step()
+    #
+    #             print(f"Epoch {epoch + 1}, Train Loss: {avg_train_loss}, Validation Loss: {avg_val_loss}")
+    #             if lr_sched is not None:
+    #                 # csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss, lr_sched.get_last_lr()])
+    #                 current_lr = optimizer.param_groups[0]['lr']
+    #                 csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss, current_lr])
+    #             else:
+    #                 csv_writer.writerow([epoch + 1, avg_train_loss, avg_val_loss, "default"])
+    #
+    #             csv_file.flush()
+    #
+    #             # if early_stopping_toggle:
+    #             #     if avg_val_loss < best_loss:
+    #             #         best_loss = avg_val_loss
+    #             #         patience_counter = 0
+    #             #     else:
+    #             #         patience_counter += 1
+    #             #     if patience_counter >= early_stopping_patience:
+    #             #         print(f"Early stopping triggered after epoch {epoch + 1}")
+    #             #         break
+    #
+    #             if early_stopping_toggle:
+    #                 if avg_val_loss < best_loss:
+    #                     best_loss = avg_val_loss
+    #                     patience_counter = 0
+    #                 else:
+    #                     patience_counter += 1
+    #                 if patience_counter >= early_stopping_patience:
+    #                     print(f"Early stopping triggered after epoch {epoch + 1}")
+    #                     break
+    #
+    #
+    #         # torch.save(model.state_dict(), f'./selfies_BART_pretrained_{key}.pth')
+    #         # model.save_pretrained(f'./selfies_BART_pretrained_{key}')
+    #         # print(f"Model saved to ./selfies_BART_pretrained_{key}.pth")
+    #         # Assume base model is defined at top level (you can pass it in or hardcode if needed)
+    #         base_model_name = "skip_base"  # <- Change if needed
+    #         base_config = hyperparameters_dict[base_model_name]
+    #         current_config = hyperparameters_dict[key]
+    #         #TODO 04/14/2025 need to readjust the models and establish a base model here! This will be good!
+    #         # diffs = diff_to_string(base_config, current_config)
+    #         # filename_stub = encode_differences_to_string(base_model_name, diffs)
+    #
+    #         # save_dir = f'./selfies_BART_pretrained__{filename_stub}'
+    #         # model_save_dir = f'./selfies_BART_pretrained__{filename_stub}'
+    #
+    #         model.save_pretrained(model_save_dir)
+    #         print(f"✅ Model saved to {model_save_dir}")
+    train_for_pretrain(model, pretrain_loader, val_loader, current_config, model_save_dir)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -991,7 +1210,8 @@ def main():
     args = parser.parse_args()
 
     hyperparameters = load_hyperparameters(args.hyperparameters_path)
-    print("Loaded hyperparameters:", hyperparameters) # TODO: NEW 02/16/2025 figure out why BART is empty in combined_config... I THINK IT WORKS... ✓✓
+    print("Loaded hyperparameters:",
+          hyperparameters)  # TODO: NEW 02/16/2025 figure out why BART is empty in combined_config... I THINK IT WORKS... ✓✓
     bart_hyperparameters = hyperparameters.get("BART", {})
     print("BART hyperparameters:", bart_hyperparameters)
 
@@ -1010,7 +1230,6 @@ def main():
 
             prepare_data(args, key)
             pretrain_BART(bart_hyperparameters, args, key)
-
 
 if __name__ == "__main__":
     main()
