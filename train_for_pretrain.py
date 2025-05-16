@@ -1195,7 +1195,7 @@ def pretrain_BART(hyperparameters_dict, args, key):
     #
     #         model.save_pretrained(model_save_dir)
     #         print(f"✅ Model saved to {model_save_dir}")
-    train_for_pretrain(model, pretrain_loader, val_loader, current_config, model_save_dir)
+    train_for_pretrain(model, pretrain_loader, val_loader, current_config, model_save_dir, csv_file_path)
 
 def main():
     parser = argparse.ArgumentParser()
