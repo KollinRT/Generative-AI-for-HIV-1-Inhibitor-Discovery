@@ -5,7 +5,7 @@ from os.path import isfile
 from prepare_dataset import bpe_tokenizer, get_selfies_only, convert_to_selfies
 from SelfiesDataHandler import SelfiesDataset, collate_fn_pre, NNLossHandler
 from torch.utils.data import Dataset, DataLoader
-from transformers import BartForConditionalGeneration, BartConfig, PreTrainedTokenizerFast, get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup
+from transformers import BartForConditionalGeneration, BartConfig, PreTrainedTokenizerFast, get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup, get_scheduler
 from tokenizers import Tokenizer
 import torch
 from tqdm import tqdm
@@ -13,14 +13,9 @@ import csv
 import os
 from generateFingerprints import make_fingerprint_thisthat
 from generateClusters import cluster_molecules
-from utils import diff_to_string, encode_differences_to_string
+from utils import diff_to_string, encode_differences_to_string, save_final_model_if_needed, write_done_marker
 from pytorch_lamb import Lamb
 from torch.nn.utils import clip_grad_norm_
-from transformers import (
-    get_linear_schedule_with_warmup,
-    get_cosine_schedule_with_warmup,
-)
-
 
 def make_optimizer(model, cfg):
     lr = cfg["LEARNING_RATE"]
@@ -37,6 +32,8 @@ def make_optimizer(model, cfg):
         return torch.optim.Adagrad(model.parameters(), lr=lr)
     elif opt == "adadelta":
         return torch.optim.Adadelta(model.parameters(), lr=lr)
+    elif opt == "adafactor":
+        return torch.optim.Adafactor(model.parameters(), lr=lr)
     else:
         raise ValueError(f"Unknown optimizer: {opt}")
 
@@ -80,6 +77,13 @@ def make_scheduler(optimizer, cfg, train_steps_per_epoch, num_epochs):
                                                    max_lr=cfg["LEARNING_RATE"],
                                                    steps_per_epoch=train_steps_per_epoch,
                                                    epochs=num_epochs)
+    elif sched_type == "inverse_sqrt":
+        return get_scheduler(
+            name="inverse_sqrt",
+            optimizer=optimizer,
+            num_warmup_steps=warmup_steps,
+            num_training_steps=total_steps
+        )
     else:
         raise ValueError(f"Unknown scheduler type: {sched_type}")
 
@@ -107,11 +111,26 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     scheduler = make_scheduler(optimizer, cfg, len(train_loader), cfg["TRAIN_EPOCHS"])
 
     best_val_loss = float('inf')
-    patience = 0
+    # Check for checkpoint
+    checkpoint_path = os.path.join(save_dir, "checkpoint_resume.pt")
+    start_epoch = 1
+    if os.path.exists(checkpoint_path):
+        print(f"🔁 Resuming from checkpoint: {checkpoint_path}")
+        checkpoint = torch.load(checkpoint_path)
+        model.load_state_dict(checkpoint["model_state"])
+        optimizer.load_state_dict(checkpoint["optimizer_state"])
+        if scheduler and checkpoint.get("scheduler_state"):
+            scheduler.load_state_dict(checkpoint["scheduler_state"])
+        best_val_loss = checkpoint["best_val_loss"]
+        patience = checkpoint["patience"]
+        start_epoch = checkpoint["epoch"] + 1
+    else:
+    # Back to config setup
+        patience = 0
     thresh = cfg["early_stopping_threshold"]
     max_patience = cfg["early_stopping_patience"]
 
-    for epoch in range(1, cfg["TRAIN_EPOCHS"] + 1):
+    for epoch in range(start_epoch, cfg["TRAIN_EPOCHS"] + 1):
         # Training
         model.train()
         total_train_loss = 0.0
@@ -146,6 +165,29 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
 
         avg_val_loss = total_val_loss / len(val_loader)
 
+        # Save if new best model
+        if avg_val_loss < best_val_loss - thresh:
+            best_val_loss = avg_val_loss
+            patience = 0
+            model.save_pretrained(save_dir)
+
+            checkpoint = {
+                "epoch": epoch,
+                "model_state": model.state_dict(),
+                "optimizer_state": optimizer.state_dict(),
+                "scheduler_state": scheduler.state_dict() if scheduler else None,
+                "best_val_loss": best_val_loss,
+                "patience": patience,
+            }
+            torch.save(checkpoint, os.path.join(save_dir, "checkpoint_resume.pt"))
+            print(f"✅ Checkpoint saved at epoch {epoch}")
+        else:
+            patience += 1
+            if patience >= max_patience:
+                print(f"? Early stopping (no improvement in {max_patience} epochs)")
+                break
+
+
         # Scheduler step
         if scheduler:
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
@@ -160,20 +202,38 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
         csv_writer.writerow([epoch, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
         csv_file.flush()
 
-        #     Early Stopping & Save
-        if avg_val_loss < best_val_loss - thresh:
-            best_val_loss = avg_val_loss
-            patience = 0
-            model.save_pretrained(save_dir)
-            print(f"??  New best model saved at epoch {epoch}")
-        else:
-            patience += 1
-            if patience >= max_patience:
-                print(f"? Early stopping (no improvement in {max_patience} epochs)")
-                break
+        # #     Early Stopping & Save
+        # if avg_val_loss < best_val_loss - thresh:
+        #     best_val_loss = avg_val_loss
+        #     patience = 0
+        #     model.save_pretrained(save_dir)
+        #     print(f"??  New best model saved at epoch {epoch}")
+        # else:
+        #     patience += 1
+        #     if patience >= max_patience:
+        #         print(f"? Early stopping (no improvement in {max_patience} epochs)")
+        #         break
 
     # close the CSV file now that training (or early stop) is done
     csv_file.close()
+
+    # # === [FINAL LOGGING AND SAFEGUARDS] ===
+    # # If no model was saved during training (e.g. no val improvement), still save final state
+    # final_model_path = os.path.join(save_dir, "pytorch_model.bin")
+    # if not os.path.exists(final_model_path):
+    #     print("🟡 No best model saved during training. Saving final model anyway.")
+    #     model.save_pretrained(save_dir)
+    #
+    # # Write a 'done.txt' marker to indicate training completed successfully
+    # done_flag_path = os.path.join(save_dir, "done.txt")
+    # with open(done_flag_path, "w") as f:
+    #     f.write("Training complete\n")
+    #
+    # print(f"✅ Training complete for model. Final checkpoint + done.txt saved at: {save_dir}")
+
+    # Final model save (if needed) + mark training complete
+    save_final_model_if_needed(model, save_dir)
+    write_done_marker(save_dir)
 
 
 def load_hyperparameters(path):
@@ -378,8 +438,20 @@ def main():
         if key.startswith("skip_"):
             continue
 
-        if os.path.exists(f'./selfies_BART_pretrained_{key}.pth'):
-            print("Model already exists! No need to retrain")
+        # if os.path.exists(f'./selfies_BART_pretrained_{key}.pth'):
+        #     print("Model already exists! No need to retrain")
+        # Before training starts:
+        filename_stub = encode_differences_to_string("skip_base", bart_hyperparameters["skip_base"],
+                                                     bart_hyperparameters[key])
+        model_save_dir = f'./selfies_BART_pretrained__{filename_stub}'
+
+        # if os.path.exists(model_save_dir):
+        #     print(f"✅ Model for '{key}' already exists at {model_save_dir}. Skipping...")
+        done_flag = os.path.join(model_save_dir, "done.txt")
+
+        if os.path.exists(done_flag):
+            print(f"✅ Model '{key}' already completed (done.txt found) — skipping retrain.")
+            continue
         else:
             args.smiles_dataset = f"model_name_{key}.csv"
             print(args.smiles_dataset)
