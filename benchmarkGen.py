@@ -215,6 +215,8 @@ import selfies as sf
 import multiprocessing as mp
 from rdkit import Chem
 from transformers import BartForConditionalGeneration, BartTokenizer, BartConfig
+from transformers.models.auto.tokenization_auto import PreTrainedTokenizerFast
+
 
 ### --- 1️⃣ Convert SELFIES to SMILES --- ###
 def selfies_to_smiles(selfies_str):
@@ -260,32 +262,32 @@ def load_smiles_from_csv(csv_path, selfies_column="selfies"):
 
 ### --- 3️⃣ Define Model Wrapper for Generation --- ###
 class HuggingFaceMoleculeGenerator:
-    def __init__(self, model_path, tokenizer_path, device="cpu"):
+    def __init__(self, model_path, tokenizer_path, device="cuda"):
         """Load Hugging Face BART model & tokenizer for molecule generation."""
         self.device = torch.device(device)
-        self.tokenizer = BartTokenizer.from_pretrained(tokenizer_path)
+        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
 
-        # ✅ Define model configuration (must match training setup)
-        config = BartConfig(
-            vocab_size=360,
-            max_position_embeddings=514,
-            d_model=768,
-            encoder_layers=12,
-            decoder_layers=12,
-            encoder_attention_heads=12,
-            decoder_attention_heads=12,
-            encoder_ffn_dim=3072,
-            decoder_ffn_dim=3072,
-            activation_function="gelu",
-            pad_token_id=1,
-            eos_token_id=2,
-            bos_token_id=0,
-        )
+        # # ✅ Define model configuration (must match training setup)
+        # config = BartConfig(
+        #     vocab_size=360,
+        #     max_position_embeddings=514,
+        #     d_model=768,
+        #     encoder_layers=12,
+        #     decoder_layers=12,
+        #     encoder_attention_heads=12,
+        #     decoder_attention_heads=12,
+        #     encoder_ffn_dim=3072,
+        #     decoder_ffn_dim=3072,
+        #     activation_function="gelu",
+        #     pad_token_id=1,
+        #     eos_token_id=2,
+        #     bos_token_id=0,
+        # )
 
         # ✅ Load model and weights
-        self.model = BartForConditionalGeneration(config)
-        state_dict = torch.load(model_path, map_location=self.device)
-        self.model.load_state_dict(state_dict, strict=False)
+        self.model = BartForConditionalGeneration.from_pretrained(model_path)
+        # state_dict = torch.load(model_path, map_location=self.device)
+        # self.model.load_state_dict(state_dict, strict=False)
         self.model.to(self.device)
         self.model.eval()
 
@@ -522,15 +524,15 @@ if __name__ == "__main__":
     finetune_smiles = load_smiles_from_csv("data/smiles_finetune_data_properties_selfies.csv")
 
     gen = HuggingFaceMoleculeGenerator(
-        model_path="./selfies_BART_finetuned_model_nada.pth",
-        tokenizer_path="./data/bpe_filter_model_nada",
+        model_path="./DataForGen/selfies_BART_pretrained__skip_base__LEARNING_RATE-3e-05__EARLY_STOPPING_PATIENCE-8__EARLY_STOPPING_THRESHOLD-0.0001__LR_SCHED-{'type'-'linear','warmup_ratio'-0.1}__OPTIMIZER-adamw",
+        tokenizer_path="./DataForGen/selfies_word_tokenizer",
         device="cuda" if torch.cuda.is_available() else "cpu"
     )
 
     start_time = time.time()
     benchmark_results = benchmark_generated_molecules(
-        gen, finetune_smiles, pretrain_smiles, num_samples=1000000, batch_size=100, num_workers=24,
-        output_csv="generated_molecules_1000k.csv"
+        gen, finetune_smiles, pretrain_smiles, num_samples=1000, batch_size=100, num_workers=12,
+        output_csv="generated_molecules_1k_new.csv"
     )
 
     print(f"\n⏳ Benchmark completed in {round(time.time() - start_time, 2)} seconds.")
