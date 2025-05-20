@@ -18,13 +18,13 @@ This will be shittily the steps required...
 CLEANUP!
 """
 
-def load_model(model_path, device='cuda'):
-    """Load the pre-trained BART model."""
-    model = BartForConditionalGeneration.from_pretrained(model_path)  # Initialize the model architecture
-    model.load_state_dict(torch.load(model_path, map_location=device))  # Load the state dictionary
-    model = model.to(device)
-    model.eval()  # Set model to evaluation mode
-    return model
+# def load_model(model_path, device='cuda'):
+#     """Load the pre-trained BART model."""
+#     model = BartForConditionalGeneration.from_pretrained(model_path)  # Initialize the model architecture
+#     model.load_state_dict(torch.load(model_path, map_location=device))  # Load the state dictionary
+#     model = model.to(device)
+#     model.eval()  # Set model to evaluation mode
+#     return model
 
 
 
@@ -141,17 +141,27 @@ import os
 #     # ✅ Load the tokenizer from the correct file
 #     return Tokenizer.from_file(tokenizer_path)
 
+def load_model(model_path, device='cuda'):
+    """Load the pre-trained BART model."""
+    model = BartForConditionalGeneration.from_pretrained(model_path)  # Initialize the model architecture
+    # model.load_state_dict(torch.load(model_path, map_location=device))  # Load the state dictionary
+    # model = model.to(device)
+    return model
+
 def load_tokenizer(tokenizer_path):
     """Load the tokenizer used for both encoding and decoding."""
     tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
     return tokenizer
+
 
 if __name__ == "__main__":
     import torch
     from transformers import BartForConditionalGeneration, PreTrainedTokenizerFast
 
     # ✅ Set paths
-    model = BartForConditionalGeneration.from_pretrained("DataForGen/selfies_BART_pretrained__skip_base__LEARNING_RATE-3e-05__EARLY_STOPPING_PATIENCE-8__EARLY_STOPPING_THRESHOLD-0.0001__LR_SCHED-{'type'-'linear','warmup_ratio'-0.1}__OPTIMIZER-adamw")
+    model_path = "DataForGen/selfies_BART_pretrained__skip_base__LEARNING_RATE-3e-05__EARLY_STOPPING_PATIENCE-8__EARLY_STOPPING_THRESHOLD-0.0001__LR_SCHED-{'type'-'linear','warmup_ratio'-0.1}__OPTIMIZER-adamw"
+    # model = BartForConditionalGeneration.from_pretrained("DataForGen/selfies_BART_pretrained__skip_base__LEARNING_RATE-3e-05__EARLY_STOPPING_PATIENCE-8__EARLY_STOPPING_THRESHOLD-0.0001__LR_SCHED-{'type'-'linear','warmup_ratio'-0.1}__OPTIMIZER-adamw")
+    model = load_model(model_path)
     tokenizer = load_tokenizer("DataForGen/selfies_word_tokenizer")
 
     # ✅ Set device
@@ -167,7 +177,7 @@ if __name__ == "__main__":
     generated_ids = model.generate(
         input_ids,
         max_length=500,
-        num_return_sequences=10,
+        num_return_sequences=100,
         do_sample=True,  # ✅ Enable sampling (adds randomness)
         temperature=0.5,  # ✅ Increase randomness (higher values = more diverse outputs)
         top_k=50,  # ✅ Consider only top 50 most likely next tokens
