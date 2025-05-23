@@ -5,6 +5,7 @@ import selfies as sf
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 from tokenizers import Tokenizer
+from transformers import PreTrainedTokenizerFast
 
 def collate_fn_pre(batch):
     # Pretraining mode: items only have 'input_ids'
@@ -45,7 +46,7 @@ def collate_fn_fine(batch):
     attention_masks = [item['attention_mask'] for item in batch]
 
     # Pad sequences to the max length in the batch
-    input_ids_padded = pad_sequence(input_ids, batch_first=True, padding_value=1)  # 1 is typically the padding token ID
+    input_ids_padded = pad_sequence(input_ids, batch_first=True, padding_value=0)  # Updated to the right padding value
     attention_masks_padded = pad_sequence(attention_masks, batch_first=True, padding_value=0)  # 0 for padding in mask
 
     batch_dict = {
@@ -60,21 +61,46 @@ def collate_fn_fine(batch):
 
     return batch_dict
 
+def collate_fn(batch, mode='fine'):
+    input_ids = [item['input_ids'] for item in batch]
+    input_ids_padded = pad_sequence(input_ids, batch_first=True, padding_value=0)
+    attention_masks_padded = pad_sequence(
+        [item['attention_mask'] for item in batch],
+        batch_first=True,
+        padding_value=0
+    ) if mode == 'fine' else (input_ids_padded != 0).long()
+
+    batch_dict = {
+        'input_ids': input_ids_padded,
+        'attention_mask': attention_masks_padded
+    }
+
+    if mode == 'fine':
+        if 'IC50' in batch[0]:
+            batch_dict['IC50'] = torch.stack([item['IC50'] for item in batch])
+        if 'inhibition_site' in batch[0]:
+            batch_dict['inhibition_site'] = torch.stack([item['inhibition_site'] for item in batch])
+
+    return batch_dict
+
 
 class SelfiesDataset(Dataset):
     # def __init__(self, csv_file, tokenizer_path, mode='pretrain'):
-    def __init__(self, dataframe, tokenizer_path, mode='pretrain'):
+    def __init__(self, dataframe, tokenizer, mode='pretrain'):
         """Initialize the dataset, loading data from CSV, setting up tokenizer and mode."""
         # self.data = pd.read_csv(csv_file)
-        self.data = dataframe
+        # self.data = dataframe
+        self.dataframe = dataframe.reset_index(drop=True)  # Ensure indices are 0,1,2,...
+
 
         # print(f"CSV columns: {self.data.columns.tolist()}")  # Debugging print statement
-        self.tokenizer = Tokenizer.from_file(tokenizer_path)
+        # self.tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
+        self.tokenizer = tokenizer
         self.mode = mode  # Options are 'pretrain' or 'finetune'
 
     def __len__(self):
         """Return the total number of entries in the dataset."""
-        return len(self.data)
+        return len(self.dataframe)
 
     # def __getitem__(self, idx):
     #     """Retrieve an item by index."""
@@ -138,37 +164,107 @@ class SelfiesDataset(Dataset):
     #             'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
     #         }
 
+    # def __getitem__(self, idx):
+    #     """Retrieve an item by index."""
+    #     selfies_string = self.dataframe.iloc[idx]['selfies']
+    #     print(f"selfies_string:\n{selfies_string}")
+    #     # encoded = self.tokenizer.encode(selfies_string)
+    #     #
+    #     print(f"The type(selfies_strings):\n{type(selfies_string)}")
+    #     # # Convert input IDs to tensor
+    #     # input_ids = torch.tensor(encoded.ids, dtype=torch.long)
+    #
+    #     # encoded = self.tokenizer.encode(selfies_string)
+    #     # input_ids = torch.tensor(encoded.ids[:256], dtype=torch.long)  # Truncate long sequences to 256 tokens
+    #     tokens = list(sf.split_selfies(selfies_string))  # ['[C]', '[C]', '[O]']
+    #     input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(tokens), dtype=torch.long)
+    #
+    #     encoded = self.tokenizer(selfies_string, padding='max_length', truncation=True, max_length=256, return_tensors='pt')
+    #     # print(f"encoded:\n{encoded}")
+    #     input_ids = encoded["input_ids"].squeeze(0)  # remove batch dim
+    #     # print(f"input_ids:\n{input_ids}")
+    #     attention_mask = encoded["attention_mask"].squeeze(0)
+    #     print(self.tokenizer.get_vocab())
+    #     # tokens = self.tokenizer.tokenize(selfies_string)
+    #     # print(f"Tokenized output: {tokens}")
+    #     print(self.tokenizer.tokenize("[C][C][Branch1]"))
+    #     print(self.tokenizer.encode("[C][C][Branch1]"))
+    #
+    #     # Create attention mask: 1 for tokens, 0 for padding
+    #     # attention_mask = torch.ones_like(input_ids, dtype=torch.long)
+    #
+    #     if self.mode == 'pretrain':
+    #         return {
+    #             'input_ids': input_ids,
+    #             'attention_mask': attention_mask  # Ensure attention_mask is included
+    #         }
+    #
+    #     elif self.mode == 'finetune':
+    #         IC50 = self.dataframe.iloc[idx]['IC50']
+    #         inhibition_site = self.dataframe.iloc[idx]['site_name']
+    #         inhibition_encoded = self.encode_inhibition_site(inhibition_site)
+    #
+    #         return {
+    #             'input_ids': input_ids,
+    #             'attention_mask': attention_mask,  # Ensure attention_mask is included
+    #             'IC50': torch.tensor([IC50], dtype=torch.float),
+    #             'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
+    #         }
     def __getitem__(self, idx):
         """Retrieve an item by index."""
-        selfies_string = self.data.iloc[idx]['selfies']
-        # encoded = self.tokenizer.encode(selfies_string)
+        selfies_string = self.dataframe.iloc[idx]['selfies']
+        print("selfies_string:", selfies_string)
+        # Correctly tokenize SELFIES using semantic splitting
+        tokens = list(sf.split_selfies(selfies_string))  # ['[C]', '[C]', '[O]']
+        input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(tokens), dtype=torch.long)
+
+        print("input_ids:", input_ids)
+        # Pad/truncate to max_length (e.g., 256)
+        # max_length = 256
+        attention_mask = torch.ones(len(input_ids), dtype=torch.long)
         #
-        # # Convert input IDs to tensor
-        # input_ids = torch.tensor(encoded.ids, dtype=torch.long)
+        print("attention_mask:", attention_mask)
+        # if len(input_ids) < max_length:
+        #     padding_length = max_length - len(input_ids)
+        #     input_ids = torch.cat([input_ids, torch.zeros(padding_length, dtype=torch.long)])
+        #     attention_mask = torch.cat([attention_mask, torch.zeros(padding_length, dtype=torch.long)])
+        # else:
+        #     input_ids = input_ids[:max_length]
+        #     attention_mask = attention_mask[:max_length]
 
-        encoded = self.tokenizer.encode(selfies_string)
-        input_ids = torch.tensor(encoded.ids[:256], dtype=torch.long)  # Truncate long sequences to 256 tokens
+        # print("padded input_ids:", input_ids)
+        # if self.mode == 'pretrain':
+        #     return {
+        #         'input_ids': input_ids,
+        #         'attention_mask': attention_mask
+        #     }
+        #
+        # elif self.mode == 'finetune':
+        #     IC50 = self.dataframe.iloc[idx]['IC50']
+        #     inhibition_site = self.dataframe.iloc[idx]['site_name']
+        #     inhibition_encoded = self.encode_inhibition_site(inhibition_site)
+        #
+        #     return {
+        #         'input_ids': input_ids,
+        #         'attention_mask': attention_mask,
+        #         'IC50': torch.tensor([IC50], dtype=torch.float),
+        #         'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
+        #     }
+        sample = {
+            'input_ids': input_ids,
+            'attention_mask': attention_mask
+        }
 
-        # Create attention mask: 1 for tokens, 0 for padding
-        attention_mask = torch.ones_like(input_ids, dtype=torch.long)
-
-        if self.mode == 'pretrain':
-            return {
-                'input_ids': input_ids,
-                'attention_mask': attention_mask  # Ensure attention_mask is included
-            }
-
-        elif self.mode == 'finetune':
-            IC50 = self.data.iloc[idx]['IC50']
-            inhibition_site = self.data.iloc[idx]['site_name']
+        if self.mode == 'finetune':
+            IC50 = self.dataframe.iloc[idx]['IC50']
+            inhibition_site = self.dataframe.iloc[idx]['site_name']
             inhibition_encoded = self.encode_inhibition_site(inhibition_site)
-
-            return {
-                'input_ids': input_ids,
-                'attention_mask': attention_mask,  # Ensure attention_mask is included
+            sample.update({
                 'IC50': torch.tensor([IC50], dtype=torch.float),
                 'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
-            }
+            })
+
+        return sample
 
     def encode_inhibition_site(self, inhibition_site):
         """Encodes the inhibition site after normalizing string to prevent matching errors."""

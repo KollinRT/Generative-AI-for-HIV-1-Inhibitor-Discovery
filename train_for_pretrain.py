@@ -1,11 +1,10 @@
 import argparse
 import pandas as pd
-import yaml
 from os.path import isfile
 from prepare_dataset import bpe_tokenizer, get_selfies_only, convert_to_selfies
-from SelfiesDataHandler import SelfiesDataset, collate_fn_pre, NNLossHandler
+from SelfiesDataHandler import SelfiesDataset, collate_fn_pre, NNLossHandler, collate_fn
 from torch.utils.data import Dataset, DataLoader
-from transformers import BartForConditionalGeneration, BartConfig, PreTrainedTokenizerFast, get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup, get_scheduler
+from transformers import BartForConditionalGeneration, BartConfig, PreTrainedTokenizerFast
 from tokenizers import Tokenizer
 import torch
 from tqdm import tqdm
@@ -13,79 +12,80 @@ import csv
 import os
 from generateFingerprints import make_fingerprint_thisthat
 from generateClusters import cluster_molecules
-from utils import diff_to_string, encode_differences_to_string, save_final_model_if_needed, write_done_marker
+from utils import diff_to_string, encode_differences_to_string, save_final_model_if_needed, write_done_marker, make_optimizer, make_scheduler, load_hyperparameters
 from pytorch_lamb import Lamb
 from torch.nn.utils import clip_grad_norm_
+import selfies as sf
 
-def make_optimizer(model, cfg):
-    lr = cfg["LEARNING_RATE"]
-    opt = cfg["optimizer"].lower()
-    if opt == "adam":
-        return torch.optim.Adam(model.parameters(), lr=lr)
-    elif opt == "adamw":
-        return torch.optim.AdamW(model.parameters(), lr=lr)
-    elif opt == "lamb":
-        return Lamb(model.parameters(), lr=lr)
-    elif opt == "sgd":
-        return torch.optim.SGD(model.parameters(), lr=lr)
-    elif opt == "adagrad":
-        return torch.optim.Adagrad(model.parameters(), lr=lr)
-    elif opt == "adadelta":
-        return torch.optim.Adadelta(model.parameters(), lr=lr)
-    elif opt == "adafactor":
-        return torch.optim.Adafactor(model.parameters(), lr=lr)
-    else:
-        raise ValueError(f"Unknown optimizer: {opt}")
-
-
-def make_scheduler(optimizer, cfg, train_steps_per_epoch, num_epochs):
-    lr_cfg = cfg.get("lr_sched", None)
-    if not isinstance(lr_cfg, dict):
-        return None
-
-    sched_type = lr_cfg["type"].lower()
-    warmup_steps = int(train_steps_per_epoch * num_epochs * lr_cfg.get("warmup_ratio", 0.0))
-    total_steps = train_steps_per_epoch * num_epochs
-
-    if sched_type == "linear":
-        return get_linear_schedule_with_warmup(optimizer, warmup_steps, total_steps)
-    elif sched_type == "cosine":
-        return get_cosine_schedule_with_warmup(optimizer, warmup_steps, total_steps)
-    elif sched_type == "steplr":
-        return torch.optim.lr_scheduler.StepLR(optimizer, step_size=lr_cfg.get("step_size", 10),
-                                               gamma=lr_cfg.get("gamma", 0.1))
-    elif sched_type == "multisteplr":
-        return torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=lr_cfg.get("milestones", [10, 20, 30]),
-                                                    gamma=lr_cfg.get("gamma", 0.5))
-    elif sched_type == "exponential":
-        return torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=lr_cfg.get("gamma", 0.9))
-    elif sched_type == "reducelronplateau":
-        return torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
-                                                          mode="min",
-                                                          patience=lr_cfg.get("patience", 3),
-                                                          factor=lr_cfg.get("factor", 0.1),
-                                                          verbose=True)
-    elif sched_type == "cyclic":
-        return torch.optim.lr_scheduler.CyclicLR(optimizer,
-                                                 base_lr=lr_cfg.get("base_lr", 1e-5),
-                                                 max_lr=lr_cfg.get("max_lr", 1e-3),
-                                                 step_size_up=lr_cfg.get("step_size_up", 5),
-                                                 mode=lr_cfg.get("mode", "triangular2"),
-                                                 cycle_momentum=False)
-    elif sched_type == "onecycle":
-        return torch.optim.lr_scheduler.OneCycleLR(optimizer,
-                                                   max_lr=cfg["LEARNING_RATE"],
-                                                   steps_per_epoch=train_steps_per_epoch,
-                                                   epochs=num_epochs)
-    elif sched_type == "inverse_sqrt":
-        return get_scheduler(
-            name="inverse_sqrt",
-            optimizer=optimizer,
-            num_warmup_steps=warmup_steps,
-            num_training_steps=total_steps
-        )
-    else:
-        raise ValueError(f"Unknown scheduler type: {sched_type}")
+# def make_optimizer(model, cfg):
+#     lr = cfg["LEARNING_RATE"]
+#     opt = cfg["optimizer"].lower()
+#     if opt == "adam":
+#         return torch.optim.Adam(model.parameters(), lr=lr)
+#     elif opt == "adamw":
+#         return torch.optim.AdamW(model.parameters(), lr=lr)
+#     elif opt == "lamb":
+#         return Lamb(model.parameters(), lr=lr)
+#     elif opt == "sgd":
+#         return torch.optim.SGD(model.parameters(), lr=lr)
+#     elif opt == "adagrad":
+#         return torch.optim.Adagrad(model.parameters(), lr=lr)
+#     elif opt == "adadelta":
+#         return torch.optim.Adadelta(model.parameters(), lr=lr)
+#     elif opt == "adafactor":
+#         return torch.optim.Adafactor(model.parameters(), lr=lr)
+#     else:
+#         raise ValueError(f"Unknown optimizer: {opt}")
+#
+#
+# def make_scheduler(optimizer, cfg, train_steps_per_epoch, num_epochs):
+#     lr_cfg = cfg.get("lr_sched", None)
+#     if not isinstance(lr_cfg, dict):
+#         return None
+#
+#     sched_type = lr_cfg["type"].lower()
+#     warmup_steps = int(train_steps_per_epoch * num_epochs * lr_cfg.get("warmup_ratio", 0.0))
+#     total_steps = train_steps_per_epoch * num_epochs
+#
+#     if sched_type == "linear":
+#         return get_linear_schedule_with_warmup(optimizer, warmup_steps, total_steps)
+#     elif sched_type == "cosine":
+#         return get_cosine_schedule_with_warmup(optimizer, warmup_steps, total_steps)
+#     elif sched_type == "steplr":
+#         return torch.optim.lr_scheduler.StepLR(optimizer, step_size=lr_cfg.get("step_size", 10),
+#                                                gamma=lr_cfg.get("gamma", 0.1))
+#     elif sched_type == "multisteplr":
+#         return torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=lr_cfg.get("milestones", [10, 20, 30]),
+#                                                     gamma=lr_cfg.get("gamma", 0.5))
+#     elif sched_type == "exponential":
+#         return torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=lr_cfg.get("gamma", 0.9))
+#     elif sched_type == "reducelronplateau":
+#         return torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
+#                                                           mode="min",
+#                                                           patience=lr_cfg.get("patience", 3),
+#                                                           factor=lr_cfg.get("factor", 0.1),
+#                                                           verbose=True)
+#     elif sched_type == "cyclic":
+#         return torch.optim.lr_scheduler.CyclicLR(optimizer,
+#                                                  base_lr=lr_cfg.get("base_lr", 1e-5),
+#                                                  max_lr=lr_cfg.get("max_lr", 1e-3),
+#                                                  step_size_up=lr_cfg.get("step_size_up", 5),
+#                                                  mode=lr_cfg.get("mode", "triangular2"),
+#                                                  cycle_momentum=False)
+#     elif sched_type == "onecycle":
+#         return torch.optim.lr_scheduler.OneCycleLR(optimizer,
+#                                                    max_lr=cfg["LEARNING_RATE"],
+#                                                    steps_per_epoch=train_steps_per_epoch,
+#                                                    epochs=num_epochs)
+#     elif sched_type == "inverse_sqrt":
+#         return get_scheduler(
+#             name="inverse_sqrt",
+#             optimizer=optimizer,
+#             num_warmup_steps=warmup_steps,
+#             num_training_steps=total_steps
+#         )
+#     else:
+#         raise ValueError(f"Unknown scheduler type: {sched_type}")
 
 
 def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_path):
@@ -236,9 +236,6 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     write_done_marker(save_dir)
 
 
-def load_hyperparameters(path):
-    with open(path, 'r') as file:
-        return yaml.safe_load(file)
 
 
 def prepare_data(args, key):
@@ -289,24 +286,92 @@ class ClusteredSelfiesDataset(Dataset):
     def __len__(self):
         return len(self.df)
 
+    # def __getitem__(self, idx):
+    #     # Use .iloc to get the row by integer index.
+    #     row = self.df.iloc[idx]
+    #     selfies_string = row['selfies']
+    #     print(selfies_string)
+    #     # encoded = self.tokenizer.encode(selfies_string)
+    #     # encoded = self.tokenizer.convert_tokens_to_ids(selfies_string)
+    #     # tokens = sf.split_selfies(selfies_string)  # → ['[C]', '[=C]', '[C]', '[O]']
+    #     # encoded = self.tokenizer.encode(tokens).ids  # Word-level tokenizer expects list of tokens
+    #     # tokens = sf.split_selfies(selfies_string)  # ['[C]', '[=C]', '[C]', '[O]']
+    #     # joined = " ".join(tokens)  # "[C] [=C] [C] [O]"
+    #     # encoded = self.tokenizer.encode(joined, add_special_tokens=True)  # ✅ CORRECT
+    #     #
+    #     # # encoded = self.tokenizer.encode(selfies_string, add_special_tokens=True)
+    #     #
+    #     # print("encoded")
+    #     # print(f"encoded type = {type(encoded)}")
+    #     # # print(f"encoded.ids={encoded.ids}")
+    #     # print(encoded)
+    #     # print("encoded")
+    #     # print(f"encoded type = {type(encoded)}")
+    #     # print(encoded)  # It's a list of token IDs
+    #     tokens = sf.split_selfies(selfies_string)
+    #     joined = " ".join(tokens)
+    #     encoded = self.tokenizer.encode(joined, add_special_tokens=True)
+    #     print(self.tokenizer.convert_ids_to_tokens([1]))  # Should return ['<pad>']
+    #
+    #     # print("encoded")
+    #     # print(f"encoded type = {type(encoded)}")
+    #     # print(encoded)  # ✅ Just print the list directly
+    #
+    #     if self.mode == 'pretrain':
+    #         return {'input_ids': torch.tensor(encoded, dtype=torch.long)}
+    #     elif self.mode == 'finetune':
+    #         IC50 = row['IC50']
+    #         inhibition_site = row['site_name']
+    #         inhibition_encoded = self.encode_inhibition_site(inhibition_site)
+    #         return {
+    #             'input_ids': torch.tensor(encoded, dtype=torch.long),
+    #             'IC50': torch.tensor([IC50], dtype=torch.float),
+    #             'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
+    #         }
+    #     else:
+    #         raise ValueError(f"Invalid mode: {self.mode}")
+    # TODO: 05/22/2025 Get encoding working here!
+    # TODO: 05/23/2025 09:37:00 How does this fit in with padding?
     def __getitem__(self, idx):
-        # Use .iloc to get the row by integer index.
-        row = self.df.iloc[idx]
-        selfies_string = row['selfies']
-        encoded = self.tokenizer.encode(selfies_string)
+        """Retrieve an item by index."""
+        selfies_string = self.df.iloc[idx]['selfies']
+        print("selfies_string:", selfies_string)
+        # Correctly tokenize SELFIES using semantic splitting
+        tokens = list(sf.split_selfies(selfies_string))  # ['[C]', '[C]', '[O]']
+        input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(tokens), dtype=torch.long)
+
+        print("input_ids:", input_ids)
+        # Pad/truncate to max_length (e.g., 256)
+        max_length = 256
+        attention_mask = torch.ones(len(input_ids), dtype=torch.long)
+
+        if len(input_ids) < max_length:
+            padding_length = max_length - len(input_ids)
+            input_ids = torch.cat([input_ids, torch.zeros(padding_length, dtype=torch.long)])
+            attention_mask = torch.cat([attention_mask, torch.zeros(padding_length, dtype=torch.long)])
+        else:
+            input_ids = input_ids[:max_length]
+            attention_mask = attention_mask[:max_length]
+
+        print("padded input_ids:", input_ids)
         if self.mode == 'pretrain':
-            return {'input_ids': torch.tensor(encoded, dtype=torch.long)}
-        elif self.mode == 'finetune':
-            IC50 = row['IC50']
-            inhibition_site = row['site_name']
-            inhibition_encoded = self.encode_inhibition_site(inhibition_site)
             return {
-                'input_ids': torch.tensor(encoded.ids, dtype=torch.long),
+                'input_ids': input_ids,
+                'attention_mask': attention_mask
+            }
+
+        elif self.mode == 'finetune':
+            IC50 = self.df.iloc[idx]['IC50']
+            inhibition_site = self.df.iloc[idx]['site_name']
+            inhibition_encoded = self.encode_inhibition_site(inhibition_site)
+
+            return {
+                'input_ids': input_ids,
+                'attention_mask': attention_mask,
                 'IC50': torch.tensor([IC50], dtype=torch.float),
                 'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
             }
-        else:
-            raise ValueError(f"Invalid mode: {self.mode}")
+
 
     def encode_inhibition_site(self, inhibition_site):
         inhibition_site = inhibition_site.strip().upper()
@@ -388,8 +453,12 @@ def pretrain_BART(hyperparameters_dict, args, key):
     train_dataset = ClusteredSelfiesDataset(train_df, tokenizer, mode='pretrain')
     valid_dataset = ClusteredSelfiesDataset(valid_df, tokenizer, mode='pretrain')
 
-    pretrain_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn_pre)
-    val_loader = DataLoader(valid_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn_pre)
+    pretrain_loader = DataLoader(train_dataset, batch_size=16, shuffle=True,
+                                 collate_fn=lambda x: collate_fn(x, mode='pre')
+                                 )
+    val_loader = DataLoader(valid_dataset, batch_size=16, shuffle=True,
+                            collate_fn=lambda x: collate_fn(x, mode='pre')
+                            )
 
     config = BartConfig(
         vocab_size=tokenizer.vocab_size,
