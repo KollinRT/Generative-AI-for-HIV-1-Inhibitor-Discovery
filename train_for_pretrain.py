@@ -450,8 +450,8 @@ def pretrain_BART(hyperparameters_dict, args, key):
     valid_df = valid_df.sample(frac=1, random_state=42).reset_index(drop=True)
 
     # Instead of passing the raw DataFrame to DataLoader, wrap it in the new ClusteredSelfiesDataset
-    train_dataset = ClusteredSelfiesDataset(train_df, tokenizer, mode='pretrain')
-    valid_dataset = ClusteredSelfiesDataset(valid_df, tokenizer, mode='pretrain')
+    train_dataset = SelfiesDataset(train_df, tokenizer, mode='pretrain')
+    valid_dataset = SelfiesDataset(valid_df, tokenizer, mode='pretrain')
 
     pretrain_loader = DataLoader(train_dataset, batch_size=16, shuffle=True,
                                  collate_fn=lambda x: collate_fn(x, mode='pre')

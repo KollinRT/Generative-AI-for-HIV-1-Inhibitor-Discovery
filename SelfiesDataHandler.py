@@ -213,17 +213,17 @@ class SelfiesDataset(Dataset):
     def __getitem__(self, idx):
         """Retrieve an item by index."""
         selfies_string = self.dataframe.iloc[idx]['selfies']
-        print("selfies_string:", selfies_string)
+        #print("selfies_string:", selfies_string)
         # Correctly tokenize SELFIES using semantic splitting
         tokens = list(sf.split_selfies(selfies_string))  # ['[C]', '[C]', '[O]']
         input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(tokens), dtype=torch.long)
 
-        print("input_ids:", input_ids)
+        #print("input_ids:", input_ids)
         # Pad/truncate to max_length (e.g., 256)
         # max_length = 256
         attention_mask = torch.ones(len(input_ids), dtype=torch.long)
         #
-        print("attention_mask:", attention_mask)
+        #print("attention_mask:", attention_mask)
         # if len(input_ids) < max_length:
         #     padding_length = max_length - len(input_ids)
         #     input_ids = torch.cat([input_ids, torch.zeros(padding_length, dtype=torch.long)])
