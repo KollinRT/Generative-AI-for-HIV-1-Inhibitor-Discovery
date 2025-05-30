@@ -170,11 +170,11 @@ def finetune_BART(hyperparameters_dict, args, key):
     current_config = hyperparameters_dict[key]
 
     # diffs = diff_to_string(base_config, current_config)
-    filename_stub = encode_differences_to_string(base_model_name, base_config, current_config)
+    # filename_stub = encode_differences_to_string(base_model_name, base_config, current_config)
     # filename_stub = encode_differences_to_string(base_model_name, diffs)
     tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer")
-    model_save_dir = f'./selfies_BART_pretrained__{filename_stub}'
-    csv_file_path = f'./finetuning_loss__{filename_stub}.csv'
+    model_save_dir = f'./selfies_BART_finetuned__{key}'
+    csv_file_path = f'./finetuning_loss__{key}.csv'
 
     df = pd.read_csv(f"./data/smiles_finetune_data_properties_selfies.csv")
 
@@ -248,9 +248,9 @@ def main():
         # if os.path.exists(f'./selfies_BART_pretrained_{key}.pth'):
         #     print("Model already exists! No need to retrain")
         # Before training starts:
-        filename_stub = encode_differences_to_string("skip_base", bart_hyperparameters["skip_base"],
-                                                     bart_hyperparameters[key])
-        model_save_dir = f'./selfies_BART_finetuned__{filename_stub}'
+        # filename_stub = encode_differences_to_string("skip_base", bart_hyperparameters["skip_base"],
+        #                                              bart_hyperparameters[key])
+        model_save_dir = f'./selfies_BART_finetuned__{key}'
 
         # if os.path.exists(model_save_dir):
         #     print(f"✅ Model for '{key}' already exists at {model_save_dir}. Skipping...")
