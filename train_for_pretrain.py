@@ -394,8 +394,8 @@ def pretrain_BART(hyperparameters_dict, args, key):
     filename_stub = encode_differences_to_string(base_model_name, base_config, current_config)
     # filename_stub = encode_differences_to_string(base_model_name, diffs)
 
-    model_save_dir = f'./selfies_BART_pretrained__{filename_stub}'
-    csv_file_path = f'./pretraining_loss__{filename_stub}.csv'
+    model_save_dir = f'./selfies_BART_pretrained__{key}'
+    csv_file_path = f'./pretraining_loss__{key}.csv'
 
     # Define Training Hyperparameters
     num_epochs = hyperparameters_dict[key]['TRAIN_EPOCHS']
@@ -510,9 +510,9 @@ def main():
         # if os.path.exists(f'./selfies_BART_pretrained_{key}.pth'):
         #     print("Model already exists! No need to retrain")
         # Before training starts:
-        filename_stub = encode_differences_to_string("skip_base", bart_hyperparameters["skip_base"],
-                                                     bart_hyperparameters[key])
-        model_save_dir = f'./selfies_BART_pretrained__{filename_stub}'
+        # filename_stub = encode_differences_to_string("skip_base", bart_hyperparameters["skip_base"],
+        #                                              bart_hyperparameters[key])
+        model_save_dir = f'./selfies_BART_pretrained__{key}'
 
         # if os.path.exists(model_save_dir):
         #     print(f"✅ Model for '{key}' already exists at {model_save_dir}. Skipping...")
