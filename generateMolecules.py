@@ -61,13 +61,12 @@ if __name__ == "__main__":
     from transformers import BartForConditionalGeneration, PreTrainedTokenizerFast
 
     # ✅ Set paths
-    model_path = "selfies_BART_pretrained__skip_base__LEARNING_RATE-3e-05__EARLY_STOPPING_PATIENCE-8__EARLY_STOPPING_THRESHOLD-0.0001__LR_SCHED-{'type'-'linear','warmup_ratio'-0.1}__OPTIMIZER-adamw"
-    # model = BartForConditionalGeneration.from_pretrained("DataForGen/selfies_BART_pretrained__skip_base__LEARNING_RATE-3e-05__EARLY_STOPPING_PATIENCE-8__EARLY_STOPPING_THRESHOLD-0.0001__LR_SCHED-{'type'-'linear','warmup_ratio'-0.1}__OPTIMIZER-adamw")
+    model_path = "selfies_BART_pretrained__model_7_adafactor_invsqrt"
     model = load_model(model_path)
     tokenizer = load_tokenizer("selfies_word_tokenizer")
 
     # ✅ Set device
-    device = torch.device("mps" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
     # ✅ Generate text
@@ -103,7 +102,7 @@ if __name__ == "__main__":
     generated_ids = model.generate(
         input_ids,
         max_length=500,
-        num_return_sequences=100,
+        num_return_sequences=10,
         do_sample=True,  # ✅ Enable sampling (adds randomness)
         temperature=1.0,  # ✅ Increase randomness (higher values = more diverse outputs)
         top_k=50,  # ✅ Consider only top 50 most likely next tokens
