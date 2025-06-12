@@ -78,14 +78,22 @@ thresholds_map = {
 #
 #             print(f"Saved clustered file: {output_filename}")
 
-for key in bart_hyperparameters.keys():
-    prepare_dataset_for_pretrain(f"./model_name_{key}.csv", f"./data/trainable_selfies_{key}.csv")
+
+# for key in bart_hyperparameters.keys():
+#     prepare_dataset_for_pretrain(f"./model_name_{key}.csv", f"./data/trainable_selfies_{key}.csv")
+
+# TODO: 06/08/2025 @ 9:33 AM
+"""
+So, I need to make the ZINC data acquisition happen within one model file? Easy access? Or integrate the way I get the 12M
+into the getDataForPretrain?
+"""
 
 gc.collect()
 
 
 for key in bart_hyperparameters.keys():
-    df = pd.read_csv(f"./data/trainable_selfies_{key}.csv")
+    # df = pd.read_csv(f"./data/trainable_selfies_{key}.csv")
+    df = pd.read_csv(f"combined_selfies_dataset_embedding_514.csv")
     print(f"reading the csv:\n{df.columns}")
     fp = make_fingerprint_thisthat(df)
 

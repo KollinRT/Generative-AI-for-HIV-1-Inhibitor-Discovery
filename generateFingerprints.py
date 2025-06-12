@@ -194,7 +194,7 @@ import selfies as sf
 
 # Helper function to convert SELFIES to RDKit Mol
 def selfies_to_mol(selfies_string):
-    smiles = sf.decoder(selfies_string)  # Decode SELFIES to SMILES
+    smiles = sf.decoder(str(selfies_string))  # Decode SELFIES to SMILES
     return Chem.MolFromSmiles(smiles)  # Convert SMILES to RDKit molecule
 
 # TODO: Convert to fingerprints
