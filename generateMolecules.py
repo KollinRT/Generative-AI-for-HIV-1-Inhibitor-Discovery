@@ -61,7 +61,7 @@ if __name__ == "__main__":
     from transformers import BartForConditionalGeneration, PreTrainedTokenizerFast
 
     # ✅ Set paths
-    model_path = "selfies_BART_pretrained__model_7_adafactor_invsqrt"
+    model_path = "selfies_BART_finetuned__model_7_adafactor_invsqrt"
     model = load_model(model_path)
     tokenizer = load_tokenizer("selfies_word_tokenizer")
 

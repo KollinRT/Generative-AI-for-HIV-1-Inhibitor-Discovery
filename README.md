@@ -223,4 +223,6 @@ python3 MakeDefaultHyperparams.py --file="./PretrainSpecs.yml"
 
 python3 prepro_ClustFing.py 
 
+python3 train_for_pretrain.py --hyperparameters_path="./combined_config.yml"
+
 ```

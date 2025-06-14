@@ -91,7 +91,13 @@ class HuggingFaceMoleculeGenerator:
 
         # input_text = "[C][N]"  # Example SELFIES input # DOESN'T DO A DIRECT STARTING BECAUSE OF THE BART MODEL STRUCTURE... 03-07-2025 TODO: ELABORATE ON THIS!
         input_text = prefix
-        input_ids = self.tokenizer(input_text, return_tensors="pt").input_ids.to(self.device)
+        #tokens = input_text.split()
+        tokens = list(sf.split_selfies(input_text))
+        print(tokens)
+        ids = self.tokenizer.convert_tokens_to_ids(tokens)
+        input_ids = torch.tensor([ids]).to(self.device)
+        print(input_ids)
+        #input_ids = self.tokenizer(input_text, return_tensors="pt").input_ids.to(self.device)
         # forced_bos_tokens = self.tokenizer("[C][N]", return_tensors="pt").input_ids[0].tolist()
         forced_bos_tokens = input_ids[0].tolist()
 
@@ -124,12 +130,12 @@ class HuggingFaceMoleculeGenerator:
                     input_ids=input_ids.expand(batch_size, -1),
                     max_length=500,
                     do_sample=True,
-                    temperature=2.5,
+                    temperature=1.2,
                     top_k=50,
                     top_p=0.95,
-                    repetition_penalty=2.3,
-                    num_beams=1,
-                    prefix_allowed_tokens_fn=prefix_allowed_fn
+                    repetition_penalty=1.2,
+                    num_beams=1
+           #         prefix_allowed_tokens_fn=prefix_allowed_fn
                 )
 
             selfies_list = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
@@ -221,20 +227,21 @@ def benchmark_generated_molecules(gen, train_set, pretrain_set, num_samples=5000
 if __name__ == "__main__":
     import time
 
-    pretrain_smiles = load_smiles_from_csv("data/trainable_selfies_model_nada.csv")
+    #pretrain_smiles = load_smiles_from_csv("data/trainable_selfies_model_nada.csv")
+    pretrain_smiles = load_smiles_from_csv("data/molecule_data_model_7_adafactor_invsqrt.csv")
     # TODO: 05/19/2025 16:33 pm get this finetune list of molecules going... Maybe same DF as that used in training the tokenizer?
     finetune_smiles = load_smiles_from_csv("data/smiles_finetune_data_properties_selfies.csv")
 
     gen = HuggingFaceMoleculeGenerator(
-        model_path="./DataForGen/selfies_BART_pretrained__skip_base__LEARNING_RATE-3e-05__EARLY_STOPPING_PATIENCE-8__EARLY_STOPPING_THRESHOLD-0.0001__LR_SCHED-{'type'-'linear','warmup_ratio'-0.1}__OPTIMIZER-adamw",
-        tokenizer_path="./DataForGen/selfies_word_tokenizer",
+        model_path="selfies_BART_finetuned__model_7_adafactor_invsqrt",
+        tokenizer_path="selfies_word_tokenizer",
         device="cuda" if torch.cuda.is_available() else "cpu"
     )
 
     start_time = time.time()
     benchmark_results = benchmark_generated_molecules(
-        gen, finetune_smiles, pretrain_smiles, num_samples=1000, batch_size=100, num_workers=12,
-        output_csv="generated_molecules_1k_new.csv"
+        gen, finetune_smiles, pretrain_smiles, num_samples=1000, batch_size=25, num_workers=12,
+        output_csv="generated_molecules_100_new.csv"
     )
 
     print(f"\n⏳ Benchmark completed in {round(time.time() - start_time, 2)} seconds.")
