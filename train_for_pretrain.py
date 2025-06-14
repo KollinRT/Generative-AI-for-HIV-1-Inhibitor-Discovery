@@ -1,8 +1,7 @@
 import argparse
 import pandas as pd
 from os.path import isfile
-from prepare_dataset import bpe_tokenizer, get_selfies_only, convert_to_selfies
-from SelfiesDataHandler import SelfiesDataset, collate_fn_pre, NNLossHandler, collate_fn
+from SelfiesDataHandler import SelfiesDataset, collate_fn
 from torch.utils.data import Dataset, DataLoader
 from transformers import BartForConditionalGeneration, BartConfig, PreTrainedTokenizerFast
 from tokenizers import Tokenizer
@@ -10,9 +9,7 @@ import torch
 from tqdm import tqdm
 import csv
 import os
-from generateFingerprints import make_fingerprint_thisthat
-from generateClusters import cluster_molecules
-from utils import diff_to_string, encode_differences_to_string, save_final_model_if_needed, write_done_marker, make_optimizer, make_scheduler, load_hyperparameters
+from utils import save_final_model_if_needed, write_done_marker, make_optimizer, make_scheduler, load_hyperparameters
 from pytorch_lamb import Lamb
 from torch.nn.utils import clip_grad_norm_
 import selfies as sf
@@ -21,78 +18,6 @@ from torch.cuda.amp import autocast, GradScaler
 
 gpu_used = "B200"
 # gpu_used = "4090"
-
-
-# def make_optimizer(model, cfg):
-#     lr = cfg["LEARNING_RATE"]
-#     opt = cfg["optimizer"].lower()
-#     if opt == "adam":
-#         return torch.optim.Adam(model.parameters(), lr=lr)
-#     elif opt == "adamw":
-#         return torch.optim.AdamW(model.parameters(), lr=lr)
-#     elif opt == "lamb":
-#         return Lamb(model.parameters(), lr=lr)
-#     elif opt == "sgd":
-#         return torch.optim.SGD(model.parameters(), lr=lr)
-#     elif opt == "adagrad":
-#         return torch.optim.Adagrad(model.parameters(), lr=lr)
-#     elif opt == "adadelta":
-#         return torch.optim.Adadelta(model.parameters(), lr=lr)
-#     elif opt == "adafactor":
-#         return torch.optim.Adafactor(model.parameters(), lr=lr)
-#     else:
-#         raise ValueError(f"Unknown optimizer: {opt}")
-#
-#
-# def make_scheduler(optimizer, cfg, train_steps_per_epoch, num_epochs):
-#     lr_cfg = cfg.get("lr_sched", None)
-#     if not isinstance(lr_cfg, dict):
-#         return None
-#
-#     sched_type = lr_cfg["type"].lower()
-#     warmup_steps = int(train_steps_per_epoch * num_epochs * lr_cfg.get("warmup_ratio", 0.0))
-#     total_steps = train_steps_per_epoch * num_epochs
-#
-#     if sched_type == "linear":
-#         return get_linear_schedule_with_warmup(optimizer, warmup_steps, total_steps)
-#     elif sched_type == "cosine":
-#         return get_cosine_schedule_with_warmup(optimizer, warmup_steps, total_steps)
-#     elif sched_type == "steplr":
-#         return torch.optim.lr_scheduler.StepLR(optimizer, step_size=lr_cfg.get("step_size", 10),
-#                                                gamma=lr_cfg.get("gamma", 0.1))
-#     elif sched_type == "multisteplr":
-#         return torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=lr_cfg.get("milestones", [10, 20, 30]),
-#                                                     gamma=lr_cfg.get("gamma", 0.5))
-#     elif sched_type == "exponential":
-#         return torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=lr_cfg.get("gamma", 0.9))
-#     elif sched_type == "reducelronplateau":
-#         return torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
-#                                                           mode="min",
-#                                                           patience=lr_cfg.get("patience", 3),
-#                                                           factor=lr_cfg.get("factor", 0.1),
-#                                                           verbose=True)
-#     elif sched_type == "cyclic":
-#         return torch.optim.lr_scheduler.CyclicLR(optimizer,
-#                                                  base_lr=lr_cfg.get("base_lr", 1e-5),
-#                                                  max_lr=lr_cfg.get("max_lr", 1e-3),
-#                                                  step_size_up=lr_cfg.get("step_size_up", 5),
-#                                                  mode=lr_cfg.get("mode", "triangular2"),
-#                                                  cycle_momentum=False)
-#     elif sched_type == "onecycle":
-#         return torch.optim.lr_scheduler.OneCycleLR(optimizer,
-#                                                    max_lr=cfg["LEARNING_RATE"],
-#                                                    steps_per_epoch=train_steps_per_epoch,
-#                                                    epochs=num_epochs)
-#     elif sched_type == "inverse_sqrt":
-#         return get_scheduler(
-#             name="inverse_sqrt",
-#             optimizer=optimizer,
-#             num_warmup_steps=warmup_steps,
-#             num_training_steps=total_steps
-#         )
-#     else:
-#         raise ValueError(f"Unknown scheduler type: {sched_type}")
-
 
 def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_path):
     """
@@ -139,49 +64,6 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     use_amp = (gpu_used == "B200")
     scaler = GradScaler() if use_amp else None
 
-    # if gpu_used == "4090":
-    #     for epoch in range(start_epoch, cfg["TRAIN_EPOCHS"] + 1):
-    #         # Training
-    #         model.train()
-    #         total_train_loss = 0.0
-    #         # for batch in train_loader:
-    #         for batch in tqdm(train_loader, desc=f"Epoch {epoch} [train]"):
-    #             batch = {k: v.to(device) for k, v in batch.items()}
-    #             outputs = model(input_ids=batch['input_ids'],
-    #                             attention_mask=batch['attention_mask'],
-    #                             labels=batch['input_ids'])
-    #             loss = outputs.loss
-    #             loss.backward()
-    #             clip_grad_norm_(model.parameters(), max_norm=1.0)
-    #             optimizer.step()
-    #             if scheduler and isinstance(scheduler, torch.optim.lr_scheduler.OneCycleLR):
-    #                 scheduler.step()
-    #             optimizer.zero_grad()
-    #             total_train_loss += loss.item()
-    #
-    # elif gpu_used == "B200":
-    #     scaler = GradScaler()
-    #     for epoch in range(start_epoch, cfg["TRAIN_EPOCHS"] + 1):
-    #         model.train()
-    #         total_train_loss = 0.0
-    #         for batch in tqdm(train_loader, desc=f"Epoch {epoch} [train]"):
-    #             batch = {k: v.to(device) for k, v in batch.items()}
-    #             with autocast():
-    #                 outputs = model(input_ids=batch['input_ids'],
-    #                                 attention_mask=batch['attention_mask'],
-    #                                 labels=batch['input_ids'])
-    #                 loss = outputs.loss
-    #
-    #             scaler.scale(loss).backward()
-    #             scaler.unscale_(optimizer)
-    #             clip_grad_norm_(model.parameters(), max_norm=1.0)
-    #             scaler.step(optimizer)
-    #             scaler.update()
-    #             optimizer.zero_grad()
-    #
-    #             total_train_loss += loss.item()
-    #
-    #     avg_train_loss = total_train_loss / len(train_loader)
     for epoch in range(start_epoch, cfg["TRAIN_EPOCHS"] + 1):
         # === Training ===
         model.train()
@@ -270,34 +152,8 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
         csv_writer.writerow([epoch, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
         csv_file.flush()
 
-        # #     Early Stopping & Save
-        # if avg_val_loss < best_val_loss - thresh:
-        #     best_val_loss = avg_val_loss
-        #     patience = 0
-        #     model.save_pretrained(save_dir)
-        #     print(f"??  New best model saved at epoch {epoch}")
-        # else:
-        #     patience += 1
-        #     if patience >= max_patience:
-        #         print(f"? Early stopping (no improvement in {max_patience} epochs)")
-        #         break
-
     # close the CSV file now that training (or early stop) is done
     csv_file.close()
-
-    # # === [FINAL LOGGING AND SAFEGUARDS] ===
-    # # If no model was saved during training (e.g. no val improvement), still save final state
-    # final_model_path = os.path.join(save_dir, "pytorch_model.bin")
-    # if not os.path.exists(final_model_path):
-    #     print("🟡 No best model saved during training. Saving final model anyway.")
-    #     model.save_pretrained(save_dir)
-    #
-    # # Write a 'done.txt' marker to indicate training completed successfully
-    # done_flag_path = os.path.join(save_dir, "done.txt")
-    # with open(done_flag_path, "w") as f:
-    #     f.write("Training complete\n")
-    #
-    # print(f"✅ Training complete for model. Final checkpoint + done.txt saved at: {save_dir}")
 
     # Final model save (if needed) + mark training complete
     save_final_model_if_needed(model, save_dir)
@@ -331,12 +187,6 @@ def prepare_data(args, key):
         prepare_dataset_for_pretrain(f"./model_name_{key}.csv", f"./data/trainable_selfies_{key}.csv")
     print(f"File for training is ready! (trainable_selfies_{key}.csv)")
 
-    # print("Creating BPE tokenizer.")
-    # if not isfile(args.bpe_path + "/merges.txt"):
-    #     import prepare_dataset
-    #     prepare_dataset.bpe_tokenizer(path=args.prepared_data_path, save_to=args.bpe_path)
-    # print("BPE Tokenizer is ready.")
-
 
 # === New: ClusteredSelfiesDataset ===
 class ClusteredSelfiesDataset(Dataset):
@@ -354,50 +204,6 @@ class ClusteredSelfiesDataset(Dataset):
     def __len__(self):
         return len(self.df)
 
-    # def __getitem__(self, idx):
-    #     # Use .iloc to get the row by integer index.
-    #     row = self.df.iloc[idx]
-    #     selfies_string = row['selfies']
-    #     print(selfies_string)
-    #     # encoded = self.tokenizer.encode(selfies_string)
-    #     # encoded = self.tokenizer.convert_tokens_to_ids(selfies_string)
-    #     # tokens = sf.split_selfies(selfies_string)  # → ['[C]', '[=C]', '[C]', '[O]']
-    #     # encoded = self.tokenizer.encode(tokens).ids  # Word-level tokenizer expects list of tokens
-    #     # tokens = sf.split_selfies(selfies_string)  # ['[C]', '[=C]', '[C]', '[O]']
-    #     # joined = " ".join(tokens)  # "[C] [=C] [C] [O]"
-    #     # encoded = self.tokenizer.encode(joined, add_special_tokens=True)  # ✅ CORRECT
-    #     #
-    #     # # encoded = self.tokenizer.encode(selfies_string, add_special_tokens=True)
-    #     #
-    #     # print("encoded")
-    #     # print(f"encoded type = {type(encoded)}")
-    #     # # print(f"encoded.ids={encoded.ids}")
-    #     # print(encoded)
-    #     # print("encoded")
-    #     # print(f"encoded type = {type(encoded)}")
-    #     # print(encoded)  # It's a list of token IDs
-    #     tokens = sf.split_selfies(selfies_string)
-    #     joined = " ".join(tokens)
-    #     encoded = self.tokenizer.encode(joined, add_special_tokens=True)
-    #     print(self.tokenizer.convert_ids_to_tokens([1]))  # Should return ['<pad>']
-    #
-    #     # print("encoded")
-    #     # print(f"encoded type = {type(encoded)}")
-    #     # print(encoded)  # ✅ Just print the list directly
-    #
-    #     if self.mode == 'pretrain':
-    #         return {'input_ids': torch.tensor(encoded, dtype=torch.long)}
-    #     elif self.mode == 'finetune':
-    #         IC50 = row['IC50']
-    #         inhibition_site = row['site_name']
-    #         inhibition_encoded = self.encode_inhibition_site(inhibition_site)
-    #         return {
-    #             'input_ids': torch.tensor(encoded, dtype=torch.long),
-    #             'IC50': torch.tensor([IC50], dtype=torch.float),
-    #             'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
-    #         }
-    #     else:
-    #         raise ValueError(f"Invalid mode: {self.mode}")
     # TODO: 05/22/2025 Get encoding working here!
     # TODO: 05/23/2025 09:37:00 How does this fit in with padding?
     def __getitem__(self, idx):
@@ -557,16 +363,8 @@ def main():
         if key.startswith("skip_"):
             continue
 
-        # if os.path.exists(f'./selfies_BART_pretrained_{key}.pth'):
-        #     print("Model already exists! No need to retrain")
-        # Before training starts:
-        # filename_stub = encode_differences_to_string("skip_base", bart_hyperparameters["skip_base"],
-        #                                              bart_hyperparameters[key])
-        # model_save_dir = f'./selfies_BART_pretrained__{key}'
         run_dir = f"./runs/selfies_BART_PRETRAIN_{key}"
 
-        # if os.path.exists(model_save_dir):
-        #     print(f"✅ Model for '{key}' already exists at {model_save_dir}. Skipping...")
         done_flag = os.path.join(run_dir, "done.txt")
 
         if os.path.exists(done_flag):
@@ -577,7 +375,6 @@ def main():
             print(args.smiles_dataset)
             args.selfies_dataset = f"./data/molecule_data_{key}.csv"
             args.prepared_data_path = f"./data/prepared_selfies_{key}.txt"
-            # args.bpe_path = f"./data/bpe_filter_{key}/"
 
             prepare_data(args, key)
             pretrain_BART(bart_hyperparameters, args, key)
