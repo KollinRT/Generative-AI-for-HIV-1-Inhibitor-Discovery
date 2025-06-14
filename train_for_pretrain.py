@@ -16,6 +16,12 @@ from utils import diff_to_string, encode_differences_to_string, save_final_model
 from pytorch_lamb import Lamb
 from torch.nn.utils import clip_grad_norm_
 import selfies as sf
+from torch.cuda.amp import autocast, GradScaler
+
+
+gpu_used = "B200"
+# gpu_used = "4090"
+
 
 # def make_optimizer(model, cfg):
 #     lr = cfg["LEARNING_RATE"]
@@ -130,23 +136,85 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     thresh = cfg["early_stopping_threshold"]
     max_patience = cfg["early_stopping_patience"]
 
+    use_amp = (gpu_used == "B200")
+    scaler = GradScaler() if use_amp else None
+
+    # if gpu_used == "4090":
+    #     for epoch in range(start_epoch, cfg["TRAIN_EPOCHS"] + 1):
+    #         # Training
+    #         model.train()
+    #         total_train_loss = 0.0
+    #         # for batch in train_loader:
+    #         for batch in tqdm(train_loader, desc=f"Epoch {epoch} [train]"):
+    #             batch = {k: v.to(device) for k, v in batch.items()}
+    #             outputs = model(input_ids=batch['input_ids'],
+    #                             attention_mask=batch['attention_mask'],
+    #                             labels=batch['input_ids'])
+    #             loss = outputs.loss
+    #             loss.backward()
+    #             clip_grad_norm_(model.parameters(), max_norm=1.0)
+    #             optimizer.step()
+    #             if scheduler and isinstance(scheduler, torch.optim.lr_scheduler.OneCycleLR):
+    #                 scheduler.step()
+    #             optimizer.zero_grad()
+    #             total_train_loss += loss.item()
+    #
+    # elif gpu_used == "B200":
+    #     scaler = GradScaler()
+    #     for epoch in range(start_epoch, cfg["TRAIN_EPOCHS"] + 1):
+    #         model.train()
+    #         total_train_loss = 0.0
+    #         for batch in tqdm(train_loader, desc=f"Epoch {epoch} [train]"):
+    #             batch = {k: v.to(device) for k, v in batch.items()}
+    #             with autocast():
+    #                 outputs = model(input_ids=batch['input_ids'],
+    #                                 attention_mask=batch['attention_mask'],
+    #                                 labels=batch['input_ids'])
+    #                 loss = outputs.loss
+    #
+    #             scaler.scale(loss).backward()
+    #             scaler.unscale_(optimizer)
+    #             clip_grad_norm_(model.parameters(), max_norm=1.0)
+    #             scaler.step(optimizer)
+    #             scaler.update()
+    #             optimizer.zero_grad()
+    #
+    #             total_train_loss += loss.item()
+    #
+    #     avg_train_loss = total_train_loss / len(train_loader)
     for epoch in range(start_epoch, cfg["TRAIN_EPOCHS"] + 1):
-        # Training
+        # === Training ===
         model.train()
         total_train_loss = 0.0
-        # for batch in train_loader:
+
         for batch in tqdm(train_loader, desc=f"Epoch {epoch} [train]"):
             batch = {k: v.to(device) for k, v in batch.items()}
-            outputs = model(input_ids=batch['input_ids'],
-                            attention_mask=batch['attention_mask'],
-                            labels=batch['input_ids'])
-            loss = outputs.loss
-            loss.backward()
-            clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
+
+            if use_amp:
+                with autocast():
+                    outputs = model(input_ids=batch['input_ids'],
+                                    attention_mask=batch['attention_mask'],
+                                    labels=batch['input_ids'])
+                    loss = outputs.loss
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                clip_grad_norm_(model.parameters(), max_norm=1.0)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                outputs = model(input_ids=batch['input_ids'],
+                                attention_mask=batch['attention_mask'],
+                                labels=batch['input_ids'])
+                loss = outputs.loss
+                loss.backward()
+                clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
+
+            optimizer.zero_grad()
+
             if scheduler and isinstance(scheduler, torch.optim.lr_scheduler.OneCycleLR):
                 scheduler.step()
-            optimizer.zero_grad()
+
             total_train_loss += loss.item()
 
         avg_train_loss = total_train_loss / len(train_loader)
@@ -390,52 +458,21 @@ def pretrain_BART(hyperparameters_dict, args, key):
     base_config = hyperparameters_dict[base_model_name]
     current_config = hyperparameters_dict[key]
 
-    # diffs = diff_to_string(base_config, current_config)
-    filename_stub = encode_differences_to_string(base_model_name, base_config, current_config)
-    # filename_stub = encode_differences_to_string(base_model_name, diffs)
-
-    model_save_dir = f'./selfies_BART_pretrained__{key}'
-    csv_file_path = f'./pretraining_loss__{key}.csv'
+    run_dir = f"./runs/selfies_BART_PRETRAIN_{key}"
+    model_save_dir = os.path.join(run_dir, "model")
+    csv_file_path = os.path.join(run_dir, "pretraining_loss.csv")
 
     # Define Training Hyperparameters
-    num_epochs = hyperparameters_dict[key]['TRAIN_EPOCHS']
-    learning_rate = hyperparameters_dict[key]['LEARNING_RATE']
-    optimizer_selection = hyperparameters_dict[key]['optimizer']
-
-    # Define early stopping criteria
-    early_stopping_toggle = hyperparameters_dict[key]["early_stopping_toggle"]
-    early_stopping_threshold = hyperparameters_dict[key]["early_stopping_threshold"]
-    early_stopping_patience = hyperparameters_dict[key]["early_stopping_patience"]
-
-    # TODO: NEW 03/11/2025: Work to utilize a LRScheduler (https://machinelearningmastery.com/using-learning-rate-schedule-in-pytorch-training/)
-    # torch.optim.lr_scheduler.ReduceLROnPlateau
-
-    # Define learning rate scheduler
-    learning_rate_scheduler_selection = hyperparameters_dict[key]['lr_sched']
-
-    # Load the tokenizer + Loss handler
-    # tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
-    tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer")
-
-    # pad_token_id = tokenizer.token_to_id("<pad>")
-    pad_token_id = tokenizer.pad_token_id
-
-    # loss_handler = NNLossHandler(
-    #     loss_name=hyperparameters_dict[key]['criterion'],
-    #     early_stopping_toggle=early_stopping_toggle,
-    #     early_stopping_threshold=early_stopping_threshold,
-    #     early_stopping_patience=early_stopping_patience,
-    #     pad_token_id=tokenizer.pad_token_id
-    # )
+    train_batch_size = current_config["TRAIN_BATCH_SIZE"]
+    val_batch_size = current_config["VALID_BATCH_SIZE"]
 
     # Load the tokenizer
-    # tokenizer = Tokenizer.from_file(f"./data/bpe_filter_{key}/bpe.json")
+    tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer")
 
     # Load DF and Cluster
     # Load and process the DataFrame: apply fingerprinting and clustering
+    # TODO 06/14/2025 @ 11:34 AM: MAKE SURE THIS DIRECTORY ALIGNS!
     df = pd.read_csv(f"./data/trainable_selfies_{key}_FP_CLUSTERED_256perms_7_clustered.csv")
-    # df = make_fingerprint_thisthat(df)
-    # df = cluster_molecules(df, f"./data/trainable_selfies_{key}.csv")
     print(df.columns)
     print(df.head(2))
 
@@ -453,10 +490,23 @@ def pretrain_BART(hyperparameters_dict, args, key):
     train_dataset = SelfiesDataset(train_df, tokenizer, mode='pretrain')
     valid_dataset = SelfiesDataset(valid_df, tokenizer, mode='pretrain')
 
-    pretrain_loader = DataLoader(train_dataset, batch_size=16, shuffle=True,
-                                 collate_fn=lambda x: collate_fn(x, mode='pre')
-                                 )
-    val_loader = DataLoader(valid_dataset, batch_size=16, shuffle=True,
+    use_amp = (gpu_used == "B200")
+    if use_amp:
+    # B200
+        pretrain_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True,
+                                collate_fn=lambda x: collate_fn(x, mode='pre'),
+                                num_workers=8, pin_memory=True
+                                )
+        val_loader = DataLoader(valid_dataset, batch_size=val_batch_size, shuffle=True,
+                                collate_fn=lambda x: collate_fn(x, mode='pre'),
+                                num_workers=8, pin_memory=True
+                                )
+    # 4090
+    else:
+        pretrain_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True,
+                             collate_fn=lambda x: collate_fn(x, mode='pre')
+                             )
+        val_loader = DataLoader(valid_dataset, batch_size=val_batch_size, shuffle=True,
                             collate_fn=lambda x: collate_fn(x, mode='pre')
                             )
 
@@ -512,11 +562,12 @@ def main():
         # Before training starts:
         # filename_stub = encode_differences_to_string("skip_base", bart_hyperparameters["skip_base"],
         #                                              bart_hyperparameters[key])
-        model_save_dir = f'./selfies_BART_pretrained__{key}'
+        # model_save_dir = f'./selfies_BART_pretrained__{key}'
+        run_dir = f"./runs/selfies_BART_PRETRAIN_{key}"
 
         # if os.path.exists(model_save_dir):
         #     print(f"✅ Model for '{key}' already exists at {model_save_dir}. Skipping...")
-        done_flag = os.path.join(model_save_dir, "done.txt")
+        done_flag = os.path.join(run_dir, "done.txt")
 
         if os.path.exists(done_flag):
             print(f"✅ Model '{key}' already completed (done.txt found) — skipping retrain.")
