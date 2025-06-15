@@ -13,8 +13,7 @@ from utils import save_final_model_if_needed, write_done_marker, make_optimizer,
 from pytorch_lamb import Lamb
 from torch.nn.utils import clip_grad_norm_
 import selfies as sf
-from torch.cuda.amp import autocast, GradScaler
-
+from torch.amp import autocast, GradScaler
 
 gpu_used = "B200"
 # gpu_used = "4090"
@@ -62,7 +61,7 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     max_patience = cfg["early_stopping_patience"]
 
     use_amp = (gpu_used == "B200")
-    scaler = GradScaler() if use_amp else None
+    scaler = GradScaler("cuda") if use_amp else None
 
     for epoch in range(start_epoch, cfg["TRAIN_EPOCHS"] + 1):
         # === Training ===
@@ -73,7 +72,7 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
             batch = {k: v.to(device) for k, v in batch.items()}
 
             if use_amp:
-                with autocast():
+                with autocast("cuda"):
                     outputs = model(input_ids=batch['input_ids'],
                                     attention_mask=batch['attention_mask'],
                                     labels=batch['input_ids'])
@@ -273,7 +272,8 @@ def pretrain_BART(hyperparameters_dict, args, key):
     val_batch_size = current_config["VALID_BATCH_SIZE"]
 
     # Load the tokenizer
-    tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer")
+    # tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer")
+    tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer_12M")
 
     # Load DF and Cluster
     # Load and process the DataFrame: apply fingerprinting and clustering
@@ -374,9 +374,9 @@ def main():
             args.smiles_dataset = f"model_name_{key}.csv"
             print(args.smiles_dataset)
             args.selfies_dataset = f"./data/molecule_data_{key}.csv"
-            args.prepared_data_path = f"./data/prepared_selfies_{key}.txt"
+            # args.prepared_data_path = f"./data/prepared_selfies_{key}.txt"
 
-            prepare_data(args, key)
+            # prepare_data(args, key)
             pretrain_BART(bart_hyperparameters, args, key)
 
 if __name__ == "__main__":
