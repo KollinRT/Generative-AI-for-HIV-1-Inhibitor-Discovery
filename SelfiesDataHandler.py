@@ -255,14 +255,14 @@ class SelfiesDataset(Dataset):
             'attention_mask': attention_mask
         }
 
-        if self.mode == 'finetune':
-            IC50 = self.dataframe.iloc[idx]['IC50']
-            inhibition_site = self.dataframe.iloc[idx]['site_name']
-            inhibition_encoded = self.encode_inhibition_site(inhibition_site)
-            sample.update({
-                'IC50': torch.tensor([IC50], dtype=torch.float),
-                'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
-            })
+        # if self.mode == 'finetune':
+        #     IC50 = self.dataframe.iloc[idx]['IC50']
+        #     inhibition_site = self.dataframe.iloc[idx]['site_name']
+        #     inhibition_encoded = self.encode_inhibition_site(inhibition_site)
+        #     sample.update({
+        #         'IC50': torch.tensor([IC50], dtype=torch.float),
+        #         'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
+        #     })
 
         return sample
 

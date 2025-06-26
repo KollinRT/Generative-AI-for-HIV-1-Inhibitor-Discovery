@@ -1,23 +1,33 @@
 import argparse
-import pandas as pd
-import numpy as np
-from os.path import isfile
-from prepare_dataset import bpe_tokenizer, get_selfies_only, convert_to_selfies
-from SelfiesDataHandler import SelfiesDataset, collate_fn_fine, NNLossHandler, collate_fn
-from torch.utils.data import Dataset, DataLoader
-from transformers import BartForConditionalGeneration, BartConfig, PreTrainedTokenizerFast
-from tokenizers import Tokenizer
-import torch
-from tqdm import tqdm  
-import csv # FOR SAVING THE LOSS
-from utils import diff_to_string, encode_differences_to_string, save_final_model_if_needed, write_done_marker, make_optimizer, make_scheduler
-from pytorch_lamb import Lamb
-from torch.nn.utils import clip_grad_norm_
+import csv  # FOR SAVING THE LOSS
 import os
-from utils import diff_to_string, encode_differences_to_string, save_final_model_if_needed, write_done_marker, make_optimizer, make_scheduler, load_hyperparameters
-from train_for_pretrain import ClusteredSelfiesDataset
+from os.path import isfile
 
-def prepare_data(args, key): # TODO: Integrate key into here.... where?
+import numpy as np
+import pandas as pd
+import selfies as sf
+import torch
+from torch.nn.utils import clip_grad_norm_
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+from transformers import BartForConditionalGeneration, PreTrainedTokenizerFast
+
+from SelfiesDataHandler import SelfiesDataset, collate_fn
+from utils import save_final_model_if_needed, write_done_marker, make_optimizer, make_scheduler, load_hyperparameters
+
+
+# os.environ['CUDA_LAUNCH_BLOCKING']="1"
+# os.environ['TORCH_USE_CUDA_DSA'] = "1"
+def prepare_data(args, key):  # TODO: Integrate key into here.... where?
+    """
+    Code to prepare data for training by handling command-line arguments
+    Args:
+        args:
+        key:
+
+    Returns:
+
+    """
     try:
         df = pd.read_csv(args.selfies_dataset)
     except FileNotFoundError:
@@ -31,17 +41,20 @@ def prepare_data(args, key): # TODO: Integrate key into here.... where?
     if not isfile(args.prepared_data_path):
         from prepare_dataset import create_selfies_file
         if args.subset_size != 0:
-            create_selfies_file(df, subset_size=args.subset_size, do_subset=True, save_to=args.prepared_data_path) # prepared_data_path is where the selfies by itself goes...
+            create_selfies_file(df, subset_size=args.subset_size, do_subset=True,
+                                save_to=args.prepared_data_path)  # prepared_data_path is where the selfies by itself goes...
         else:
-            create_selfies_file(df, do_subset=False, save_to=args.prepared_data_path) # TODO: Need to ensure this is being done! LAST STEP!
+            create_selfies_file(df, do_subset=False,
+                                save_to=args.prepared_data_path)  # TODO: Need to ensure this is being done! LAST STEP!
     print("SELFIES .txt is ready for tokenization.")
 
     print("Creating file for training!")
     if not isfile(f"./data/trainable_selfies_{key}.csv"):
         from prepare_dataset import prepare_dataset_for_pretrain
-        prepare_dataset_for_pretrain(f"./model_name_{key}.csv",f"./data/trainable_selfies_{key}.csv")
+        prepare_dataset_for_pretrain(f"./model_name_{key}.csv", f"./data/trainable_selfies_{key}.csv")
     print(f"File for training is ready! (trainable_selfies_{key}.csv)")
-        
+
+
 def train_for_finetune(model, train_loader, val_loader, cfg, save_dir, csv_file_path):
     """
     model        : a BartForConditionalGeneration
@@ -59,7 +72,10 @@ def train_for_finetune(model, train_loader, val_loader, cfg, save_dir, csv_file_
     csv_writer.writerow(["epoch", "train_loss", "val_loss", "learning_rate"])
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # DEBUGGING
+    # device = "cpu"
     model.to(device)
+    print(f"Model vocab size: {model.model.shared.num_embeddings}")
 
     optimizer = make_optimizer(model, cfg)
     scheduler = make_scheduler(optimizer, cfg, len(train_loader), cfg["TRAIN_EPOCHS"])
@@ -79,7 +95,7 @@ def train_for_finetune(model, train_loader, val_loader, cfg, save_dir, csv_file_
         patience = checkpoint["patience"]
         start_epoch = checkpoint["epoch"] + 1
     else:
-    # Back to config setup
+        # Back to config setup
         patience = 0
     thresh = cfg["early_stopping_threshold"]
     max_patience = cfg["early_stopping_patience"]
@@ -91,6 +107,13 @@ def train_for_finetune(model, train_loader, val_loader, cfg, save_dir, csv_file_
         # for batch in train_loader:
         for batch in tqdm(train_loader, desc=f"Epoch {epoch} [train]"):
             batch = {k: v.to(device) for k, v in batch.items()}
+            # Debug print
+            # print("🧪 [Train] input_ids stats:")
+            # print("  shape:", batch['input_ids'].shape)
+            # print("  max:", batch['input_ids'].max())
+            # print("  min:", batch['input_ids'].min())
+            # print("  dtype:", batch['input_ids'].dtype)
+            # print(f"batch['input_ids':\n{batch['input_ids']}")
             outputs = model(input_ids=batch['input_ids'],
                             attention_mask=batch['attention_mask'],
                             labels=batch['input_ids'])
@@ -112,6 +135,12 @@ def train_for_finetune(model, train_loader, val_loader, cfg, save_dir, csv_file_
             # for batch in val_loader:
             for batch in tqdm(val_loader, desc=f"Epoch {epoch} [val]"):
                 batch = {k: v.to(device) for k, v in batch.items()}
+                print("🧪 [Val] input_ids stats:")
+                print("  shape:", batch['input_ids'].shape)
+                print("  max:", batch['input_ids'].max())
+                print("  min:", batch['input_ids'].min())
+                print("  dtype:", batch['input_ids'].dtype)
+
                 loss = model(input_ids=batch['input_ids'],
                              attention_mask=batch['attention_mask'],
                              labels=batch['input_ids']).loss
@@ -141,7 +170,6 @@ def train_for_finetune(model, train_loader, val_loader, cfg, save_dir, csv_file_
                 print(f"? Early stopping (no improvement in {max_patience} epochs)")
                 break
 
-
         # Scheduler step
         if scheduler:
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
@@ -163,20 +191,30 @@ def train_for_finetune(model, train_loader, val_loader, cfg, save_dir, csv_file_
     save_final_model_if_needed(model, save_dir)
     write_done_marker(save_dir)
 
+
 def finetune_BART(hyperparameters_dict, args, key):
+    """
+    # TODO: 06/23/2025: FLESH THIS OUT
+    Args:
+        hyperparameters_dict:
+        args:
+        key:
+
+    Returns:
+
+    """
     # Setup File config parameters
     base_model_name = "skip_base"  # Customize as needed
     base_config = hyperparameters_dict[base_model_name]
     current_config = hyperparameters_dict[key]
 
-    # diffs = diff_to_string(base_config, current_config)
-    # filename_stub = encode_differences_to_string(base_model_name, base_config, current_config)
-    # filename_stub = encode_differences_to_string(base_model_name, diffs)
-    tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer")
-    model_save_dir = f'./selfies_BART_finetuned__{key}'
-    csv_file_path = f'./finetuning_loss__{key}.csv'
+    tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer_12M")
+    run_dir = f"./runs/selfies_BART_finetune_{key}"
+    model_save_dir = os.path.join(run_dir, "model")
+    csv_file_path = os.path.join(run_dir, "finetune_loss.csv")
 
-    df = pd.read_csv(f"./data/smiles_finetune_data_properties_selfies.csv")
+    # Current embedding less than 512 one for finetune...
+    df = pd.read_csv(f"./data/smiles_finetune_data_properties_selfies_REMOVED1.csv")
 
     # DEBUG PURPOSES:
     # Set a random seed for reproducibility
@@ -190,21 +228,10 @@ def finetune_BART(hyperparameters_dict, args, key):
     df_train = df.iloc[train_indices].reset_index(drop=True)
     df_val = df.iloc[test_indices].reset_index(drop=True)
 
-    # finetune_train_dataset = ClusteredSelfiesDataset(df=df_train, tokenizer=tokenizer,
-    #                                         mode="finetune")
-    # finetune_validation_dataset = ClusteredSelfiesDataset(df=df_val, tokenizer=tokenizer,
-    #                                              mode="finetune")
     finetune_train_dataset = SelfiesDataset(dataframe=df_train, tokenizer=tokenizer,
                                             mode="finetune")
     finetune_validation_dataset = SelfiesDataset(dataframe=df_val, tokenizer=tokenizer,
                                                  mode="finetune")
-
-
-    # TODO: NEW 02/18/2025 get the IC50 finetune data!
-
-    # TODO: Above should be the one fine_tune approach. It is the same for all models...
-    # TODO: NEW 02/18/2025... This should be a load the finetune train and validation models and randomly grab 90/10% split...
-    #
 
     # Create DataLoader
     finetune_train_loader = DataLoader(
@@ -216,45 +243,80 @@ def finetune_BART(hyperparameters_dict, args, key):
         collate_fn=lambda x: collate_fn(x, mode='fine')
     )
 
-    model_path = "DataForGen/selfies_BART_pretrained__skip_base__LEARNING_RATE-3e-05__EARLY_STOPPING_PATIENCE-8__EARLY_STOPPING_THRESHOLD-0.0001__LR_SCHED-{'type'-'linear','warmup_ratio'-0.1}__OPTIMIZER-adamw"
-    model = BartForConditionalGeneration.from_pretrained(model_path)
-    # Resize token embeddings to match the tokenizer
-    model.resize_token_embeddings(len(tokenizer))
-    print("Tokenizer vocab size:", len(tokenizer))
-    print("Model config vocab size:", model.config.vocab_size)
-    print(tokenizer.special_tokens_map)
+    model_path = "/home/kollin/Desktop/CollectedRuns_All_And_New/CollectedRuns_All_And_New/CollectedRuns/CLUSTER_RESULTS/extra/selfies_BART_PRETRAIN_model_4/model"
+    # for inputs, labels in finetune_train_loader:
+    #     print("Input shape:", inputs.shape)
+    #     print("Input max", inputs.max())
+    #     print("Input min", inputs.min())
+    #     print("Label max", labels.max())
+    #     print("Label min", labels.min())
+    #     break
+    #
+    # for inputs, labels in finetune_validation_loader:
+    #     print("Input shape:", inputs.shape)
+    #     print("Input max", inputs.max())
+    #     print("Input min", inputs.min())
+    #     print("Label max", labels.max())
+    #     print("Label min", labels.min())
+    #     break
 
-    train_for_finetune(model, finetune_train_loader, finetune_validation_loader, current_config, model_save_dir, csv_file_path)
+    for batch in finetune_train_loader:
+        inputs = batch['input_ids']
+        labels = batch['input_ids']
+        print("Input shape:", inputs.shape)
+        print("Input max", inputs.max())
+        print("Input min", inputs.min())
+        print("Label max", labels.max())
+        print("Label min", labels.min())
+        break
+
+    for batch in finetune_validation_loader:
+        inputs = batch['input_ids']
+        labels = batch['input_ids']
+        print("Input shape:", inputs.shape)
+        print("Input max", inputs.max())
+        print("Input min", inputs.min())
+        print("Label max", labels.max())
+        print("Label min", labels.min())
+        break
+
+    model = BartForConditionalGeneration.from_pretrained(model_path)
+
+    # Test a forward pass
+    input_ids = torch.tensor([tokenizer.convert_tokens_to_ids(sf.split_selfies('[C][O][Si]'))])
+    output = model(input_ids=input_ids, decoder_input_ids=input_ids)
+
+    print("Model output shape:", output.logits.shape)
+
+    train_for_finetune(model, finetune_train_loader, finetune_validation_loader, current_config, model_save_dir,
+                       csv_file_path)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--smiles_dataset", required=False, metavar="/path/to/dataset/*.csv", help="Path of the SMILES dataset.")
-    parser.add_argument("--selfies_dataset", required=False, metavar="/path/to/dataset/*.csv", help="Path of the SEFLIES dataset.")
-    parser.add_argument("--subset_size", required=False, metavar="<int>", type=int, default=0, help="By default the program will use the whole data. If you want to instead use a subset of the data, set this parameter to the size of the subset.")
-    parser.add_argument("--hyperparameters_path", required=True, metavar="/path/to/hyperparameters/", help="Path of the hyperparameters that will be used for pre-training. Hyperparameters should be stored in a yaml file.")
+    parser.add_argument("--smiles_dataset", required=False, metavar="/path/to/dataset/*.csv",
+                        help="Path of the SMILES dataset.")
+    parser.add_argument("--selfies_dataset", required=False, metavar="/path/to/dataset/*.csv",
+                        help="Path of the SEFLIES dataset.")
+    parser.add_argument("--subset_size", required=False, metavar="<int>", type=int, default=0,
+                        help="By default the program will use the whole data. If you want to instead use a subset of the data, set this parameter to the size of the subset.")
+    parser.add_argument("--hyperparameters_path", required=True, metavar="/path/to/hyperparameters/",
+                        help="Path of the hyperparameters that will be used for pre-training. Hyperparameters should be stored in a yaml file.")
     args = parser.parse_args()
 
     hyperparameters = load_hyperparameters(args.hyperparameters_path)
     print("Loaded hyperparameters:", hyperparameters)
-    bart_hyperparameters = hyperparameters.get("BART", {}) # This would have some model specific hyperparameters and probably be part of a for loop to iterate over the keys representing each model in the hyperparameters dictionary.
+    bart_hyperparameters = hyperparameters.get("BART",
+                                               {})  # This would have some model specific hyperparameters and probably be part of a for loop to iterate over the keys representing each model in the hyperparameters dictionary.
     print("BART hyperparameters:", bart_hyperparameters)
-    
 
     for key in bart_hyperparameters.keys():
         if key.startswith("skip_"):
             continue
 
-        # if os.path.exists(f'./selfies_BART_pretrained_{key}.pth'):
-        #     print("Model already exists! No need to retrain")
-        # Before training starts:
-        # filename_stub = encode_differences_to_string("skip_base", bart_hyperparameters["skip_base"],
-        #                                              bart_hyperparameters[key])
-        model_save_dir = f'./selfies_BART_finetuned__{key}'
+        run_dir = f"./runs/selfies_BART_finetune_{key}"
 
-        # if os.path.exists(model_save_dir):
-        #     print(f"✅ Model for '{key}' already exists at {model_save_dir}. Skipping...")
-        done_flag = os.path.join(model_save_dir, "done.txt")
+        done_flag = os.path.join(run_dir, "done.txt")
 
         if os.path.exists(done_flag):
             print(f"✅ Model '{key}' already completed (done.txt found) — skipping retrain.")
@@ -264,15 +326,13 @@ def main():
             print(args.smiles_dataset)
             args.selfies_dataset = f"./data/molecule_data_{key}.csv"
             args.prepared_data_path = f"./data/prepared_selfies_{key}.txt"
-            # args.bpe_path = f"./data/bpe_filter_{key}/"
 
-            # prepare_data(args, key)
             finetune_BART(bart_hyperparameters, args, key)
 
 
 if __name__ == "__main__":
     main()
-    
+
 """
 TODO: Finetuning data requires the specific dataset from the beginning...
 it needs to have site_name for it... My pretrain data does NOT need it...

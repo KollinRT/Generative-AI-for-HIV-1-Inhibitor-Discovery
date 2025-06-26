@@ -2,6 +2,7 @@ import os
 import torch
 from transformers import get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup, get_scheduler
 import yaml
+from pytorch_lamb import Lamb
 
 def diff_to_string(base_config, other_config):
     diffs = {}

@@ -1,22 +1,25 @@
 import argparse
-import pandas as pd
-from os.path import isfile
-from SelfiesDataHandler import SelfiesDataset, collate_fn
-from torch.utils.data import Dataset, DataLoader
-from transformers import BartForConditionalGeneration, BartConfig, PreTrainedTokenizerFast
-from tokenizers import Tokenizer
-import torch
-from tqdm import tqdm
 import csv
 import os
-from utils import save_final_model_if_needed, write_done_marker, make_optimizer, make_scheduler, load_hyperparameters
-from pytorch_lamb import Lamb
-from torch.nn.utils import clip_grad_norm_
-import selfies as sf
-from torch.amp import autocast, GradScaler
+from os.path import isfile
 
-gpu_used = "B200"
-# gpu_used = "4090"
+import pandas as pd
+import selfies as sf
+import torch
+from pytorch_lamb import Lamb
+from tokenizers import Tokenizer
+from torch.amp import autocast, GradScaler
+from torch.nn.utils import clip_grad_norm_
+from torch.utils.data import Dataset, DataLoader
+from tqdm import tqdm
+from transformers import BartForConditionalGeneration, BartConfig, PreTrainedTokenizerFast
+
+from SelfiesDataHandler import SelfiesDataset, collate_fn
+from utils import save_final_model_if_needed, write_done_marker, make_optimizer, make_scheduler, load_hyperparameters
+
+# gpu_used = "B200"
+gpu_used = "4090"
+
 
 def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_path):
     """
@@ -35,6 +38,7 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     csv_writer.writerow(["epoch", "train_loss", "val_loss", "learning_rate"])
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Device: {device}")
     model.to(device)
 
     optimizer = make_optimizer(model, cfg)
@@ -55,7 +59,7 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
         patience = checkpoint["patience"]
         start_epoch = checkpoint["epoch"] + 1
     else:
-    # Back to config setup
+        # Back to config setup
         patience = 0
     thresh = cfg["early_stopping_threshold"]
     max_patience = cfg["early_stopping_patience"]
@@ -136,7 +140,6 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
                 print(f"? Early stopping (no improvement in {max_patience} epochs)")
                 break
 
-
         # Scheduler step
         if scheduler:
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
@@ -159,9 +162,15 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     write_done_marker(save_dir)
 
 
-
-
 def prepare_data(args, key):
+    """
+    Args:
+        args:
+        key:
+
+    Returns:
+
+    """
     try:
         df = pd.read_csv(args.selfies_dataset)
     except FileNotFoundError:
@@ -245,7 +254,6 @@ class ClusteredSelfiesDataset(Dataset):
                 'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
             }
 
-
     def encode_inhibition_site(self, inhibition_site):
         inhibition_site = inhibition_site.strip().upper()
         if 'RVP' in inhibition_site:
@@ -258,6 +266,15 @@ class ClusteredSelfiesDataset(Dataset):
 # ===================================
 
 def pretrain_BART(hyperparameters_dict, args, key):
+    """
+    Args:
+        hyperparameters_dict: YAML file to be passed in with configuration.
+        args: NOT NECESSARY.
+        key: key name of model for downstream naming.
+
+    Returns:
+
+    """
     # Setup File config parameters
     base_model_name = "skip_base"  # Customize as needed
     base_config = hyperparameters_dict[base_model_name]
@@ -298,11 +315,11 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
     use_amp = (gpu_used == "B200")
     if use_amp:
-    # B200
+        # B200
         pretrain_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True,
-                                collate_fn=lambda x: collate_fn(x, mode='pre'),
-                                num_workers=8, pin_memory=True
-                                )
+                                     collate_fn=lambda x: collate_fn(x, mode='pre'),
+                                     num_workers=8, pin_memory=True
+                                     )
         val_loader = DataLoader(valid_dataset, batch_size=val_batch_size, shuffle=True,
                                 collate_fn=lambda x: collate_fn(x, mode='pre'),
                                 num_workers=8, pin_memory=True
@@ -310,11 +327,11 @@ def pretrain_BART(hyperparameters_dict, args, key):
     # 4090
     else:
         pretrain_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True,
-                             collate_fn=lambda x: collate_fn(x, mode='pre')
-                             )
+                                     collate_fn=lambda x: collate_fn(x, mode='pre')
+                                     )
         val_loader = DataLoader(valid_dataset, batch_size=val_batch_size, shuffle=True,
-                            collate_fn=lambda x: collate_fn(x, mode='pre')
-                            )
+                                collate_fn=lambda x: collate_fn(x, mode='pre')
+                                )
 
     config = BartConfig(
         vocab_size=tokenizer.vocab_size,
@@ -332,7 +349,7 @@ def pretrain_BART(hyperparameters_dict, args, key):
         mask_token_id=tokenizer.mask_token_id
     )
     model = BartForConditionalGeneration(config)
-
+    # model = torch.compile(model)
 
     # Print DataFrame info for debugging
     print("Final training DataFrame:")
@@ -340,6 +357,7 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
     # Training Loop START
     train_for_pretrain(model, pretrain_loader, val_loader, current_config, model_save_dir, csv_file_path)
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -378,6 +396,7 @@ def main():
 
             # prepare_data(args, key)
             pretrain_BART(bart_hyperparameters, args, key)
+
 
 if __name__ == "__main__":
     main()
