@@ -1,6 +1,7 @@
 """
 This script is for generating molecules from the pretrained and fine-tuned model for use for evaluating model performance.
 """
+from token_mapping import token_mapping
 
 def generate_text(model, tokenizer, input_text, max_length=100, num_return_sequences=5, num_beams=5):
     model.eval()  # Set the model to evaluation mode
@@ -61,9 +62,10 @@ if __name__ == "__main__":
     from transformers import BartForConditionalGeneration, PreTrainedTokenizerFast
 
     # ✅ Set paths
-    model_path = "selfies_BART_finetuned__model_7_adafactor_invsqrt"
+    #model_path = "/home/kollin/Desktop/CollectedRuns_All_And_New/CollectedRuns_All_And_New/CollectedRuns/CLUSTER_RESULTS/extra/selfies_BART_PRETRAIN_model_4/model"
+    model_path = "/home/kollin/Desktop/ThesisBU/WIP_Thesis/runs/selfies_BART_finetune_model_4/model"
     model = load_model(model_path)
-    tokenizer = load_tokenizer("selfies_word_tokenizer")
+    tokenizer = load_tokenizer("selfies_word_tokenizer_12M")
 
     # ✅ Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -73,9 +75,10 @@ if __name__ == "__main__":
     # # input_text = "<s>"  # Example SELFIES input
     # # input_text.
     # # input_text = "[C] [C] [Branch1_1] [O][C][C][N][C][=O][C][C][Ring1][C][C][=O][O]"
-    # input_text = "[C] [C] [O]"
-    # input_text = "[C] [C] [Branch1_1] [O] [C] [C] [N] [C] [=O] [C] [C] [Ring1] [C] [C] [=O] [O]"
-    input_text = "<s>"
+    #input_text = "[C] [C] [O]"
+    #input_text = "[C] [C] [Branch1_1] [O] [C] [C] [N] [C] [=O] [C] [C] [Ring1] [C] [C] [=O] [O]"
+    #input_text = "[C]"
+    input_text = "<s> [C]"
     #
     # # 1. Manual split
     # tokens = input_text.split()
@@ -102,19 +105,38 @@ if __name__ == "__main__":
     generated_ids = model.generate(
         input_ids,
         max_length=500,
-        num_return_sequences=10,
+        num_return_sequences=50,
         do_sample=True,  # ✅ Enable sampling (adds randomness)
         temperature=1.0,  # ✅ Increase randomness (higher values = more diverse outputs)
         top_k=50,  # ✅ Consider only top 50 most likely next tokens
         top_p=0.95,  # ✅ Use nucleus sampling (focus on probable tokens)
         repetition_penalty=1.0,  # ✅ Penalize repetitive phrases
-        num_beams=1  # ✅ Disable beam search (prevents deterministic output)
+        num_beams=50  # ✅ Disable beam search (prevents deterministic output)
     )
 
 
     generated_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
     # generated_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-    cleaned_selfies = [''.join(t.split()) for t in generated_texts]
+
+    # ✅ Apply token mapping to each token before constructing the final SELFIES string
+    cleaned_selfies = []
+    for text in generated_texts:
+        tokens = text.strip().split()  # Token-level split
+
+        # Debug again
+        print("tokens:\n")
+        print(tokens)
+        mapped_tokens = [token_mapping.get(tok, tok) for tok in tokens]  # Use mapping; fallback to original if not found
+        
+        # Debug
+        print("mapped_tokens:\n")
+        print(mapped_tokens)
+        selfies_string = ''.join(mapped_tokens)
+        cleaned_selfies.append(selfies_string)
+
+    print("Generated Texts:", generated_texts)
+    print("Cleaned SELFIES:", cleaned_selfies)
+
 
     print("Generated Texts:", generated_texts)
     print(cleaned_selfies)
