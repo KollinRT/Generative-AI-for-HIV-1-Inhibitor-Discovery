@@ -212,7 +212,8 @@ class SelfiesDataset(Dataset):
     #         }
     def __getitem__(self, idx):
         """Retrieve an item by index."""
-        selfies_string = self.dataframe.iloc[idx]['selfies']
+        selfies_string = str(self.dataframe.iloc[idx]['selfies'])  # force cast to str
+        #selfies_string = self.dataframe.iloc[idx]['selfies']
         #print("selfies_string:", selfies_string)
         # Correctly tokenize SELFIES using semantic splitting
         tokens = list(sf.split_selfies(selfies_string))  # ['[C]', '[C]', '[O]']
