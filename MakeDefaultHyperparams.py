@@ -21,15 +21,56 @@ default_config = OrderedDict([
     ("NUM_DECODER_ATTENTION_HEADS", 12),
     ("ENCODER_FFN_DIM", 3072),
     ("DECODER_FFN_DIM", 3072),
-    ("VOCAB_SIZE", 30000),
     ("MAX_POSITION_EMBEDDINGS", 514),
     ("NUM_ATTENTION_HEADS", 12),
     ("NUM_HIDDEN_LAYERS", 8),
     ("TYPE_VOCAB_SIZE", 1),
     ("optimizer", "adam"),
-    ("criterion", "crossentropy")
+    ("criterion", "crossentropy"),
+    ("early_stopping_toggle", True),
+    ("early_stopping_threshold", 5.0E-5),
+    ("early_stopping_patience", 5),
+    ("lr_sched", None)
 ])
+# TODO: Add early stopping here:
+"""
+Plan of attack:
+1. early_stopping_enable = true/false Boolean
+2. early_stopping_threshold = Difference? Float
+3. early_stopping_patience = Difference in steps? Int
 
+The first is required to toggle the second or third? Patience is interesting in which we check the number of steps since the last improvement. We just want it to improve more! If it gets worse than the best, we keep stacking up...
+
+    # Early stopping logic
+    if early_stopping_enabled:
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            patience_counter = 0  # Reset patience counter if there's improvement
+        else:
+            patience_counter += 1
+
+        if patience_counter >= early_stopping_patience:
+            print(f"Early stopping triggered after epoch {epoch + 1}")
+            break
+other metrics:
+For Text Generation:
+Perplexity:
+BLEU (Bilingual Evaluation Understudy):
+ROUGE (Recall-Oriented Understudy for Gisting Evaluation):
+Distinct-n Metrics:
+Human Evaluation:
+?
+I think I can check out perplexity? See what other CLMs utilize and look at those. Look at how they are utilized in training and that'll help me...
+Maybe refactor into a class-based early stopping but only if it is reusable across metrics...I think I can check out perplexity? See what other CLMs utilize and look at those. Look at how they are utilized in training and that'll help me...
+Maybe refactor into a class-based early stopping but only if it is reusable across metrics...I think I can check out perplexity? See what other CLMs utilize and look at those. Look at how they are utilized in training and that'll help me...
+Maybe refactor into a class-based early stopping but only if it is reusable across metrics...I think I can check out perplexity? See what other CLMs utilize and look at those. Look at how they are utilized in training and that'll help me...
+Maybe refactor into a class-based early stopping but only if it is reusable across metrics...I think I can check out perplexity? See what other CLMs utilize and look at those. Look at how they are utilized in training and that'll help me...
+Maybe refactor into a class-based early stopping but only if it is reusable across metrics...I think I can check out perplexity? See what other CLMs utilize and look at those. Look at how they are utilized in training and that'll help me...
+Maybe refactor into a class-based early stopping but only if it is reusable across metrics...I think I can check out perplexity? See what other CLMs utilize and look at those. Look at how they are utilized in training and that'll help me...
+Maybe refactor into a class-based early stopping but only if it is reusable across metrics...I think I can check out perplexity? See what other CLMs utilize and look at those. Look at how they are utilized in training and that'll help me...
+Maybe refactor into a class-based early stopping but only if it is reusable across metrics...I think I can check out perplexity? See what other CLMs utilize and look at those. Look at how they are utilized in training and that'll help me...
+Maybe refactor into a class-based early stopping but only if it is reusable across keys...
+"""
 
 
 # Path to the additional configurations YAML file

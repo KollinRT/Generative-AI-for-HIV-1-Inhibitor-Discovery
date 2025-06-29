@@ -20,30 +20,6 @@ python3 train_for_pretrain.py --smiles_dataset="./ChEMBL34_druglike_activity_fil
 
 need to use `pip install accelerate -U` to get it working with training 
 
-
-        new file:   ChEMBL34_druglike_activity_filtered_ringsless3_under550MW.csv
-        new file:   ChEMBL34_selfies_non.csv
-        new file:   Main5Finetuning_BaseNon.py
-        new file:   WIP_BartSettings.py
-        new file:   bart_model.py
-        new file:   cleanedupExploreData.ipynb
-        new file:   data/bpe_filter/bpe.json
-        new file:   data/bpe_filter/merges.txt
-        new file:   data/bpe_filter/vocab.json
-        new file:   data_needed.sql
-        new file:   environment.yml
-        new file:   exploredata.ipynb
-        new file:   models/WIP_BartSettings.py
-        new file:   models/__init__.py
-        new file:   models/create_hparam_set.py
-        new file:   models/data/pretraining_hyperparameters.yml
-        new file:   models/exampleArgs.txt
-        new file:   models/hparams.yml
-        new file:   models/hyperparameters.yml
-        new file:   models/pretraining.yml
-        new file:   outputs/selfies_filtered.txt
-        new file:   train_for_pretrain.py
-
 ## How to configure the input files...
 
 In order for set up to run, we need to first download data for [ChEMBL_34](https://chembl.gitbook.io/chembl-interface-documentation/downloads), which we would download the ChEMBLdb and the database format of your choice.
@@ -115,7 +91,7 @@ This returns a `.csv` file with
 Next we proceed with 
 
 ```bash
-python3 MakeDefaultHyperparams.py. --file "./PretrainSpecs.yml"
+python3 MakeDefaultHyperparams.py --file "./PretrainSpecs.yml"
 ```
 This will make the `combined_config.yml` file with some default hyperparameters...
 
@@ -126,4 +102,127 @@ To proceed with finetuning, we need to....
 To run this pretraining we use
 ```python3
 python3 train_for_pretrain.py --yaml="./PretrainSpecs.yml"
+```
+
+```python3
+python3 train_for_pretrain.py --hyperparameters_path="./PretrainSpecs.yml"
+```
+
+```bash
+python3 train_for_pretrain.py --hyperparameters_path="./combined_config.yml"
+```
+
+Going to have to add logging information for loss to create a graph for each epoch or every 5 epoch logged into a .csv file that I can graph at the end...
+- - Maybe even have it create the graphs at the end of each go around and make it be pretrain and even save the config info for each model... that way it allows for easy replicability!
+
+
+## In training loop
+Need to add epoch % 5 == 0, log info on loss and epoch no...
+
+
+### Logical execution
+```bash
+conda activate thesisproj
+```
+#### 1. Get the data
+utilize the file
+`getDataForPretrain.yml` 
+```bash
+python3 getDataForPretrain.py --yaml="./PretrainSpecs.yml"
+```
+gets you going to generate the files. This can then be fed into the next step.
+
+[//]: # (##### Need to make the default parameters)
+
+[//]: # (```bash)
+
+[//]: # (python3 MakeDefaultHyperparams.py --file="./PretrainSpecs.yml")
+
+[//]: # (```)
+
+#### 2. Generate the combined_config file
+utilize the file
+`train_for_pretrain.py`
+
+[//]: # (```bash)
+
+[//]: # (python3 train_for_pretrain.py --hyperparameters_path="./combined_config.yml")
+
+[//]: # (```)
+
+```bash
+python3 MakeDefaultHyperparams.py --file="./PretrainSpecs.yml"
+```
+[//]: # (> Combined configuration saved to combined_config.yml)
+
+But first you have to generate the data for the `./combined_config.yml` file.
+This is in the 
+`MakeDefaultHyperparams.py` 
+file along with the default hyperparams config.
+Run it then generate the `./combined_config.yml`
+
+#### 3a. Generate the fingerprints and the clusters.
+The fingerprints for the models can be generated with the
+`generateClusters.py` and `generateFingerprints.py`
+files. These may be incorporated into the `train_for_pretrain.py` file, but still would have to get it working, as it is not currently but works independently...  
+**TODO**:
+- [ ] Get the standalone files to work well and consistently and document the process.
+    - [ ] Get this implemented into the current logic and not standalone?
+
+This will perform the clustering that will interplay with the `ClusteredSelfiesDataset` class in `train_for_pretrain.py`.
+This will add the fingerprints and cluster columns into the df (csv) file that will be utilized to help select the most likely singleton drugs for use in validation splitting.
+- should be one-offs, I hope? The last clusterIDs are lower in total count?
+
+
+Should be the following basics
+```bash
+python3 prepro_ClustFing.py 
+```
+At the moment to generate selfies, generate fingerprints, and then generate clusters...
+
+
+
+#### 3b. Train the pre-train model
+utilize the file
+`train_for_pretrain.py`
+This will work with the `./combined_config.yml` file since it needs the hyperparameters.  
+
+
+```bash
+python3 train_for_pretrain.py --hyperparameters_path="./combined_config.yml"
+```
+This will train the model with the SELFIES text.
+
+
+##### Tech Specs
+Intel Core i9-13900KF Processor (24 core (8P/16E)/32 Threads)  
+128 GB RAM 4800 MHz  
+RTX 4090 24GB VRAM  
+
+
+
+
+#### TODO:   
+- [ ] Get `getDataForFinetune.py` working for the finetuning dataset.
+    - [ ] Need to get random sampling done for 9:1 split for finetuning.
+- [ ] explore hyperparameter optimization
+    - [ ] this could include a pytorch LRScheduler... 
+    - [ ] this could also include trying adagrad? Maybe optimizing hyperparameter dimensions?
+      - [ ] check the post more...
+
+- [ ] This could be trying `"ReduceLROnPlateau" class (https://github.com/pytorch/pytorch/blob/main/torch/optim/lr_scheduler.py), would this work well?
+
+
+#### Definitive Workflow make into a bash script
+```bash
+conda activate thesisproj
+
+python3 getDataForPretrain.py --yaml="./PretrainSpecs.yml"
+
+python3 MakeDefaultHyperparams.py --file="./PretrainSpecs.yml"
+
+python3 prepro_ClustFing.py 
+
+python3 train_for_pretrain.py --hyperparameters_path="./combined_config.yml"
+
 ```
