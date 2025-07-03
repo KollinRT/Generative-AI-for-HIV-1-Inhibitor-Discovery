@@ -71,6 +71,19 @@ class SelfiesDataset(Dataset):
         self.tokenizer = tokenizer
         self.mode = mode  # Options are 'pretrain' or 'finetune'
 
+        # self.mask_prob = mask_prob
+        # self.max_length = max_length
+
+    def corrupt_selfies(self, selfies_str):
+        tokens = list(sf.split_selfies(selfies_str))
+        corrupted = []
+        for token in tokens:
+            if random.random() < self.mask_prob:
+                corrupted.append('[MASK]')
+            else:
+                corrupted.append(token)
+        return ''.join(corrupted)
+
     def __len__(self):
         """Return the total number of entries in the dataset."""
         return len(self.dataframe)

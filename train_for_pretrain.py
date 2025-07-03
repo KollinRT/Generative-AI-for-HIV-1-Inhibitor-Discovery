@@ -97,6 +97,7 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
         step_in_epoch = 0
 
         for batch in tqdm(train_loader, desc=f"Epoch {epoch} [train]"):
+            print(batch)
             batch = {k: v.to(device) for k, v in batch.items()}
             # === Forward / Backward pass ===
             if use_amp:
