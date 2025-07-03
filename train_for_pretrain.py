@@ -9,6 +9,7 @@ import torch
 from pytorch_lamb import Lamb
 from tokenizers import Tokenizer
 from torch.amp import autocast, GradScaler
+import torch.nn as nn
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
@@ -17,8 +18,23 @@ from transformers import BartForConditionalGeneration, BartConfig, PreTrainedTok
 from SelfiesDataHandler import SelfiesDataset, collate_fn
 from utils import save_final_model_if_needed, write_done_marker, make_optimizer, make_scheduler, load_hyperparameters
 
-# gpu_used = "B200"
-gpu_used = "4090"
+gpu_used = "B200"
+#gpu_used = "4090"
+
+VAL_EVERY_STEPS = 500
+
+def run_validation(model, epoch, val_loader, device):
+    model.eval()
+    total_val_loss = 0.0
+    with torch.no_grad():
+        # for batch in tqdm(val_loader, desc="Validating"):
+        for batch in tqdm(val_loader, desc=f"Epoch {epoch} [val]"):
+            batch = {k: v.to(device) for k, v in batch.items()}
+            loss = model(input_ids=batch['input_ids'],
+                         attention_mask=batch['attention_mask'],
+                         labels=batch['input_ids']).loss
+            total_val_loss += loss.item()
+    return total_val_loss / len(val_loader)
 
 
 def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_path):
@@ -35,10 +51,14 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     # csv_file = open(csv_path, "w", newline="")
     csv_file = open(csv_file_path, "w", newline="")
     csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(["epoch", "train_loss", "val_loss", "learning_rate"])
+    # csv_writer.writerow(["epoch", "train_loss", "val_loss", "learning_rate"])
+    csv_writer.writerow(["epoch", "global_step", "train_loss", "val_loss", "learning_rate"])
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
+    #if torch.cuda.device_count() > 1:
+    #    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    #    model = nn.DataParallel(model)
     model.to(device)
 
     optimizer = make_optimizer(model, cfg)
@@ -48,6 +68,7 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     # Check for checkpoint
     checkpoint_path = os.path.join(save_dir, "checkpoint_resume.pt")
     start_epoch = 1
+
     if os.path.exists(checkpoint_path):
         print(f"🔁 Resuming from checkpoint: {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path)
@@ -67,14 +88,17 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     use_amp = (gpu_used == "B200")
     scaler = GradScaler("cuda") if use_amp else None
 
+    global_step = 0
+
     for epoch in range(start_epoch, cfg["TRAIN_EPOCHS"] + 1):
         # === Training ===
         model.train()
         total_train_loss = 0.0
+        step_in_epoch = 0
 
         for batch in tqdm(train_loader, desc=f"Epoch {epoch} [train]"):
             batch = {k: v.to(device) for k, v in batch.items()}
-
+            # === Forward / Backward pass ===
             if use_amp:
                 with autocast("cuda"):
                     outputs = model(input_ids=batch['input_ids'],
@@ -97,62 +121,103 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
 
             optimizer.zero_grad()
 
-            if scheduler and isinstance(scheduler, torch.optim.lr_scheduler.OneCycleLR):
+            # ✅ Scheduler step after optimizer step and zero_grad
+            if scheduler and not isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                 scheduler.step()
 
             total_train_loss += loss.item()
+            step_in_epoch += 1
+            global_step += 1
 
-        avg_train_loss = total_train_loss / len(train_loader)
+        # avg_train_loss = total_train_loss / len(train_loader)
 
         # Validation
-        model.eval()
-        total_val_loss = 0.0
-        with torch.no_grad():
-            # for batch in val_loader:
-            for batch in tqdm(val_loader, desc=f"Epoch {epoch} [val]"):
-                batch = {k: v.to(device) for k, v in batch.items()}
-                loss = model(input_ids=batch['input_ids'],
-                             attention_mask=batch['attention_mask'],
-                             labels=batch['input_ids']).loss
-                total_val_loss += loss.item()
+        # model.eval()
+        # total_val_loss = 0.0
+        # with torch.no_grad():
+        #     # for batch in val_loader:
+        #     for batch in tqdm(val_loader, desc=f"Epoch {epoch} [val]"):
+        #         batch = {k: v.to(device) for k, v in batch.items()}
+        #         loss = model(input_ids=batch['input_ids'],
+        #                      attention_mask=batch['attention_mask'],
+        #                      labels=batch['input_ids']).loss
+        #         total_val_loss += loss.item()
+        if global_step % VAL_EVERY_STEPS == 0:
+            avg_train_loss = total_train_loss / step_in_epoch
+            avg_val_loss = run_validation(model, epoch, val_loader, device)
 
-        avg_val_loss = total_val_loss / len(val_loader)
+            # Save best checkpoint
+            if avg_val_loss < best_val_loss - thresh:
+                best_val_loss = avg_val_loss
+                patience = 0
+                model.save_pretrained(save_dir)
+                checkpoint = {
+                    "epoch": epoch,
+                    "model_state": model.state_dict(),
+                    "optimizer_state": optimizer.state_dict(),
+                    "scheduler_state": scheduler.state_dict() if scheduler else None,
+                    "best_val_loss": best_val_loss,
+                    "patience": patience,
+                }
+                torch.save(checkpoint, checkpoint_path)
+                print(f"✅ Checkpoint saved at step {global_step}")
+            else:
+                patience += 1
+                if patience >= max_patience:
+                    print(f"Early stopping (no improvement in {max_patience} validation checks)")
+                    csv_file.close()
+                    save_final_model_if_needed(model, save_dir)
+                    write_done_marker(save_dir)
+                    return  # Early stop exit
 
-        # Save if new best model
-        if avg_val_loss < best_val_loss - thresh:
-            best_val_loss = avg_val_loss
-            patience = 0
-            model.save_pretrained(save_dir)
+        # avg_val_loss = total_val_loss / len(val_loader)
 
-            checkpoint = {
-                "epoch": epoch,
-                "model_state": model.state_dict(),
-                "optimizer_state": optimizer.state_dict(),
-                "scheduler_state": scheduler.state_dict() if scheduler else None,
-                "best_val_loss": best_val_loss,
-                "patience": patience,
-            }
-            torch.save(checkpoint, os.path.join(save_dir, "checkpoint_resume.pt"))
-            print(f"✅ Checkpoint saved at epoch {epoch}")
-        else:
-            patience += 1
-            if patience >= max_patience:
-                print(f"? Early stopping (no improvement in {max_patience} epochs)")
-                break
+        # # Save if new best model
+        # if avg_val_loss < best_val_loss - thresh:
+        #     best_val_loss = avg_val_loss
+        #     patience = 0
+        #     model.save_pretrained(save_dir)
+        #
+        #     checkpoint = {
+        #         "epoch": epoch,
+        #         "model_state": model.state_dict(),
+        #         "optimizer_state": optimizer.state_dict(),
+        #         "scheduler_state": scheduler.state_dict() if scheduler else None,
+        #         "best_val_loss": best_val_loss,
+        #         "patience": patience,
+        #     }
+        #     torch.save(checkpoint, os.path.join(save_dir, "checkpoint_resume.pt"))
+        #     print(f"✅ Checkpoint saved at epoch {epoch}")
+        # else:
+        #     patience += 1
+        #     if patience >= max_patience:
+        #         print(f"? Early stopping (no improvement in {max_patience} epochs)")
+        #         break
 
         # Scheduler step
-        if scheduler:
-            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                scheduler.step(avg_val_loss)
-            elif not isinstance(scheduler, torch.optim.lr_scheduler.OneCycleLR):
-                scheduler.step()
+        # # === Only for ReduceLROnPlateau or OneCycleLR ===
+        # if scheduler and isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+        #     scheduler.step(avg_val_loss)
+        # elif scheduler and isinstance(scheduler, torch.optim.lr_scheduler.OneCycleLR):
+        #     scheduler.step(avg_val_loss)
 
-        #     Logging
+        # #     Logging
+        # current_lr = optimizer.param_groups[0]['lr']
+        # print(f"[Epoch {epoch}] train_loss={avg_train_loss:.4f}  "
+        #       f"val_loss={avg_val_loss:.4f}  lr={current_lr:.2E}")
+        # csv_writer.writerow([epoch, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
+        # csv_file.flush()
+
+        # Learning rate (use first group)
         current_lr = optimizer.param_groups[0]['lr']
-        print(f"[Epoch {epoch}] train_loss={avg_train_loss:.4f}  "
+        print(f"[Epoch {epoch} | Step {global_step}] train_loss={avg_train_loss:.4f}  "
               f"val_loss={avg_val_loss:.4f}  lr={current_lr:.2E}")
-        csv_writer.writerow([epoch, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
+        csv_writer.writerow([epoch, global_step, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
         csv_file.flush()
+
+        # Reset train loss for the next validation interval
+        total_train_loss = 0.0
+        step_in_epoch = 0
 
     # close the CSV file now that training (or early stop) is done
     csv_file.close()
@@ -295,7 +360,8 @@ def pretrain_BART(hyperparameters_dict, args, key):
     # Load DF and Cluster
     # Load and process the DataFrame: apply fingerprinting and clustering
     # TODO 06/14/2025 @ 11:34 AM: MAKE SURE THIS DIRECTORY ALIGNS!
-    df = pd.read_csv(f"./data/trainable_selfies_{key}_FP_CLUSTERED_256perms_7_clustered.csv")
+    # df = pd.read_csv(f"./data/trainable_selfies_{key}_FP_CLUSTERED_256perms_7_clustered.csv")
+    df = pd.read_csv(f"./{key}_FP_pre.csv")
     print(df.columns)
     print(df.head(2))
 
@@ -318,14 +384,14 @@ def pretrain_BART(hyperparameters_dict, args, key):
         # B200
         pretrain_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True,
                                      collate_fn=lambda x: collate_fn(x, mode='pre'),
-                                     num_workers=8, pin_memory=True
+                                     num_workers=10, pin_memory=True
                                      )
         val_loader = DataLoader(valid_dataset, batch_size=val_batch_size, shuffle=True,
                                 collate_fn=lambda x: collate_fn(x, mode='pre'),
-                                num_workers=8, pin_memory=True
+                                num_workers=10, pin_memory=True
                                 )
-    # 4090
     else:
+        # 4090
         pretrain_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True,
                                      collate_fn=lambda x: collate_fn(x, mode='pre')
                                      )

@@ -3,8 +3,19 @@ import torch
 from transformers import get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup, get_scheduler
 import yaml
 from pytorch_lamb import Lamb
+import random
+import selfies as sf
 
 def diff_to_string(base_config, other_config):
+    """
+
+    Args:
+        base_config:
+        other_config:
+
+    Returns:
+
+    """
     diffs = {}
     for key in base_config:
         base_val = base_config.get(key)
@@ -15,6 +26,15 @@ def diff_to_string(base_config, other_config):
 
 # def encode_differences_to_string(base_model_name, diffs):
 def encode_differences_to_string(base_model_name, base_config, other_config):
+    """
+    Args:
+        base_model_name:
+        base_config:
+        other_config:
+
+    Returns:
+
+    """
     diffs = diff_to_string(base_config, other_config)
     parts = [base_model_name]
     for key, value in sorted(diffs.items()):
