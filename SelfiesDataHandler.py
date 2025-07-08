@@ -41,6 +41,7 @@ def collate_fn_fine(batch):
 def collate_fn(batch, mode='fine'):
     input_ids = [item['input_ids'] for item in batch]
     input_ids_padded = pad_sequence(input_ids, batch_first=True, padding_value=0)
+
     attention_masks_padded = pad_sequence(
         [item['attention_mask'] for item in batch],
         batch_first=True,
@@ -51,6 +52,12 @@ def collate_fn(batch, mode='fine'):
         'input_ids': input_ids_padded,
         'attention_mask': attention_masks_padded
     }
+
+    # Add labels for pretrain mode (or fine mode if you have labels)
+    if 'labels' in batch[0]:
+        labels = [item['labels'] for item in batch]
+        labels_padded = pad_sequence(labels, batch_first=True, padding_value=-100)  # -100 to ignore in loss
+        batch_dict['labels'] = labels_padded
 
     if mode == 'fine':
         if 'IC50' in batch[0]:
@@ -63,15 +70,15 @@ def collate_fn(batch, mode='fine'):
 
 class SelfiesDataset(Dataset):
     # def __init__(self, csv_file, tokenizer_path, mode='pretrain'):
-    def __init__(self, dataframe, tokenizer, mode='pretrain'):
+    def __init__(self, dataframe, tokenizer, mode='pretrain', mask_prob=0.15):
         """Initialize the dataset, loading data from CSV, setting up tokenizer and mode."""
-        self.dataframe = dataframe.reset_index(drop=True)  # Ensure indices are 0,1,2,...
-
+        # self.dataframe = dataframe.reset_index(drop=True)  # Ensure indices are 0,1,2,...
+        self.dataframe = dataframe
 
         self.tokenizer = tokenizer
         self.mode = mode  # Options are 'pretrain' or 'finetune'
 
-        # self.mask_prob = mask_prob
+        self.mask_prob = mask_prob
         # self.max_length = max_length
 
     def corrupt_selfies(self, selfies_str):
@@ -86,22 +93,85 @@ class SelfiesDataset(Dataset):
 
     def __len__(self):
         """Return the total number of entries in the dataset."""
-        return len(self.dataframe)
+        lengths = self.dataframe.map_partitions(len).compute()
+        total_len = lengths.sum()
+        return total_len
+        # return self.dataframe.metadata.num_rows
+
+        # return len(self.dataframe)
+
+    # def __getitem__(self, idx):
+    #     """Retrieve an item by index."""
+    #     selfies_string = str(self.dataframe.iloc[idx]['selfies'])  # force cast to str
+    #
+    #     # Correctly tokenize SELFIES using semantic splitting
+    #     tokens = list(sf.split_selfies(selfies_string))  # ['[C]', '[C]', '[O]']
+    #     input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(tokens), dtype=torch.long)
+    #     attention_mask = torch.ones(len(input_ids), dtype=torch.long)
+    #
+    #     sample = {
+    #         'input_ids': input_ids,
+    #         'attention_mask': attention_mask
+    #     }
+    #     return sample
+    # def __getitem__(self, idx):
+    #     selfies_string = str(self.dataframe.iloc[idx]['selfies'])
+    #
+    #     tokens = list(sf.split_selfies(selfies_string))
+    #
+    #     # Convert tokens to input IDs
+    #     input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(tokens), dtype=torch.long)
+    #
+    #     attention_mask = torch.ones(len(input_ids), dtype=torch.long)
+    #
+    #     # For labels, create a copy (original tokens)
+    #     labels = input_ids.clone()
+    #
+    #     # Optionally: replace padding tokens in labels with -100 (if you pad later)
+    #     # But since no padding here, this is fine
+    #
+    #     sample = {
+    #         'input_ids': input_ids,
+    #         'attention_mask': attention_mask,
+    #         'labels': labels
+    #     }
+    #     return sample
 
     def __getitem__(self, idx):
-        """Retrieve an item by index."""
-        selfies_string = str(self.dataframe.iloc[idx]['selfies'])  # force cast to str
+        # print(f"self.tokenizer.mask_token_id: {self.tokenizer.mask_token_id}")
+        selfies_string = str(self.dataframe.iloc[idx]['selfies'])
 
-        # Correctly tokenize SELFIES using semantic splitting
-        tokens = list(sf.split_selfies(selfies_string))  # ['[C]', '[C]', '[O]']
-        input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(tokens), dtype=torch.long)
+        # Corrupt only in 'pretrain' mode
+        if self.mode == 'pretrain':
+            corrupted_selfies = self.corrupt_selfies(selfies_string)
+        else:
+            corrupted_selfies = selfies_string  # No corruption in finetune
+
+        # Tokenize
+        input_tokens = list(sf.split_selfies(corrupted_selfies))
+        input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(input_tokens), dtype=torch.long)
+
+        # Always use the original (uncorrupted) tokens as labels in pretrain
+        label_tokens = list(sf.split_selfies(selfies_string))
+        labels = torch.tensor(self.tokenizer.convert_tokens_to_ids(label_tokens), dtype=torch.long)
+
         attention_mask = torch.ones(len(input_ids), dtype=torch.long)
+
+        # Mask labels for unmasked tokens:
+        mask_token_id = self.tokenizer.mask_token_id
+
+        for i, token_id in enumerate(input_ids):
+            if token_id != mask_token_id:
+                labels[i] = -100  # ignore loss on unmasked tokens
 
         sample = {
             'input_ids': input_ids,
-            'attention_mask': attention_mask
+            'attention_mask': attention_mask,
+            'labels': labels
         }
+
         return sample
+
 
     def encode_inhibition_site(self, inhibition_site):
         """Encodes the inhibition site after normalizing string to prevent matching errors."""
@@ -316,3 +386,71 @@ class NNLossHandler:
             return True
 
         return False
+
+
+
+# === New: ClusteredSelfiesDataset ===
+class ClusteredSelfiesDataset(Dataset):
+    def __init__(self, df, tokenizer, mode='pretrain'):
+        """
+        Args:
+            df (pandas.DataFrame): Clustered DataFrame that must contain a 'selfies' column.
+            tokenizer: A tokenizer instance with an .encode() method.
+            mode (str): 'pretrain' or 'finetune'. In 'finetune' mode, additional columns (e.g., 'IC50', 'site_name') are expected.
+        """
+        self.df = df.reset_index(drop=True)  # Ensure indices are 0,1,2,...
+        self.tokenizer = tokenizer
+        self.mode = mode
+
+    def __len__(self):
+        return len(self.df)
+
+    # TODO: 05/22/2025 Get encoding working here!
+    # TODO: 05/23/2025 09:37:00 How does this fit in with padding?
+    def __getitem__(self, idx):
+        """Retrieve an item by index."""
+        selfies_string = self.df.iloc[idx]['selfies']
+        print("selfies_string:", selfies_string)
+        # Correctly tokenize SELFIES using semantic splitting
+        tokens = list(sf.split_selfies(selfies_string))  # ['[C]', '[C]', '[O]']
+        input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(tokens), dtype=torch.long)
+
+        print("input_ids:", input_ids)
+        # Pad/truncate to max_length (e.g., 256)
+        max_length = 256
+        attention_mask = torch.ones(len(input_ids), dtype=torch.long)
+
+        if len(input_ids) < max_length:
+            padding_length = max_length - len(input_ids)
+            input_ids = torch.cat([input_ids, torch.zeros(padding_length, dtype=torch.long)])
+            attention_mask = torch.cat([attention_mask, torch.zeros(padding_length, dtype=torch.long)])
+        else:
+            input_ids = input_ids[:max_length]
+            attention_mask = attention_mask[:max_length]
+
+        print("padded input_ids:", input_ids)
+        if self.mode == 'pretrain':
+            return {
+                'input_ids': input_ids,
+                'attention_mask': attention_mask
+            }
+
+        elif self.mode == 'finetune':
+            IC50 = self.df.iloc[idx]['IC50']
+            inhibition_site = self.df.iloc[idx]['site_name']
+            inhibition_encoded = self.encode_inhibition_site(inhibition_site)
+
+            return {
+                'input_ids': input_ids,
+                'attention_mask': attention_mask,
+                'IC50': torch.tensor([IC50], dtype=torch.float),
+                'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
+            }
+
+    def encode_inhibition_site(self, inhibition_site):
+        inhibition_site = inhibition_site.strip().upper()
+        if 'RVP' in inhibition_site:
+            return 0
+        elif 'RVE' in inhibition_site:
+            return 1
+        return -1

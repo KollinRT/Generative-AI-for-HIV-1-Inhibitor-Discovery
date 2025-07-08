@@ -91,6 +91,7 @@ def make_scheduler(optimizer, cfg, train_steps_per_epoch, num_epochs):
 
     sched_type = lr_cfg["type"].lower()
     warmup_steps = int(train_steps_per_epoch * num_epochs * lr_cfg.get("warmup_ratio", 0.0))
+    print(f"Warmup ratio: {lr_cfg.get('warmup_ratio', 0.0)}")
     total_steps = train_steps_per_epoch * num_epochs
 
     if sched_type == "linear":

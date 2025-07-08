@@ -4,6 +4,7 @@ import os
 from os.path import isfile
 
 import pandas as pd
+import dask.dataframe as dd
 import selfies as sf
 import torch
 from pytorch_lamb import Lamb
@@ -18,10 +19,15 @@ from transformers import BartForConditionalGeneration, BartConfig, PreTrainedTok
 from SelfiesDataHandler import SelfiesDataset, collate_fn
 from utils import save_final_model_if_needed, write_done_marker, make_optimizer, make_scheduler, load_hyperparameters
 
-gpu_used = "B200"
-#gpu_used = "4090"
+import glob
 
-VAL_EVERY_STEPS = 500
+
+gpu_used = "B200"
+# gpu_used = "4090"
+
+VAL_EVERY_STEPS = 100
+# MAX_BATCHES_VAL = 100
+MAX_VALID_BATCH_SIZE = 20
 
 def run_validation(model, epoch, val_loader, device):
     model.eval()
@@ -35,6 +41,25 @@ def run_validation(model, epoch, val_loader, device):
                          labels=batch['input_ids']).loss
             total_val_loss += loss.item()
     return total_val_loss / len(val_loader)
+
+def run_validation_batched(model, epoch, val_loader, device, max_batches=None):
+    model.eval()
+    total_val_loss = 0.0
+    batches_seen = 0
+    with torch.no_grad():
+        for batch in tqdm(val_loader, desc=f"Epoch {epoch} [val]", leave=False):
+            batch = {k: v.to(device) for k, v in batch.items()}
+            loss = model(input_ids=batch['input_ids'],
+                         attention_mask=batch['attention_mask'],
+                         labels=batch['labels']).loss
+            total_val_loss += loss.item()
+            batches_seen += 1
+
+            if max_batches and batches_seen >= max_batches:
+                break
+
+    avg_val_loss = total_val_loss / batches_seen
+    return avg_val_loss
 
 
 def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_path):
@@ -62,6 +87,8 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     model.to(device)
 
     optimizer = make_optimizer(model, cfg)
+    print(f"length of train_loader: {len(train_loader)}")
+    print(f"Number of epochs: {cfg['TRAIN_EPOCHS']}")
     scheduler = make_scheduler(optimizer, cfg, len(train_loader), cfg["TRAIN_EPOCHS"])
 
     best_val_loss = float('inf')
@@ -89,7 +116,7 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     scaler = GradScaler("cuda") if use_amp else None
 
     global_step = 0
-
+    batch_number = 0
     for epoch in range(start_epoch, cfg["TRAIN_EPOCHS"] + 1):
         # === Training ===
         model.train()
@@ -97,14 +124,17 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
         step_in_epoch = 0
 
         for batch in tqdm(train_loader, desc=f"Epoch {epoch} [train]"):
-            print(batch)
+            # print(batch)
+            # print(type(batch))  # print the type of batch itself
+            # for key,value in batch.items():
+            #     print(f"{key}: {value}")
             batch = {k: v.to(device) for k, v in batch.items()}
             # === Forward / Backward pass ===
             if use_amp:
                 with autocast("cuda"):
                     outputs = model(input_ids=batch['input_ids'],
                                     attention_mask=batch['attention_mask'],
-                                    labels=batch['input_ids'])
+                                    labels=batch['labels'])
                     loss = outputs.loss
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
@@ -114,7 +144,7 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
             else:
                 outputs = model(input_ids=batch['input_ids'],
                                 attention_mask=batch['attention_mask'],
-                                labels=batch['input_ids'])
+                                labels=batch['labels'])
                 loss = outputs.loss
                 loss.backward()
                 clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -130,6 +160,8 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
             step_in_epoch += 1
             global_step += 1
 
+            print(f"step_in_epoch: {step_in_epoch}\nglobal_step: {global_step}")
+
         # avg_train_loss = total_train_loss / len(train_loader)
 
         # Validation
@@ -143,33 +175,36 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
         #                      attention_mask=batch['attention_mask'],
         #                      labels=batch['input_ids']).loss
         #         total_val_loss += loss.item()
-        if global_step % VAL_EVERY_STEPS == 0:
-            avg_train_loss = total_train_loss / step_in_epoch
-            avg_val_loss = run_validation(model, epoch, val_loader, device)
+            if global_step % VAL_EVERY_STEPS == 0:
+                avg_train_loss = total_train_loss / step_in_epoch
+                # avg_val_loss = run_validation(model, epoch, val_loader, device)
 
-            # Save best checkpoint
-            if avg_val_loss < best_val_loss - thresh:
-                best_val_loss = avg_val_loss
-                patience = 0
-                model.save_pretrained(save_dir)
-                checkpoint = {
-                    "epoch": epoch,
-                    "model_state": model.state_dict(),
-                    "optimizer_state": optimizer.state_dict(),
-                    "scheduler_state": scheduler.state_dict() if scheduler else None,
-                    "best_val_loss": best_val_loss,
-                    "patience": patience,
-                }
-                torch.save(checkpoint, checkpoint_path)
-                print(f"✅ Checkpoint saved at step {global_step}")
-            else:
-                patience += 1
-                if patience >= max_patience:
-                    print(f"Early stopping (no improvement in {max_patience} validation checks)")
-                    csv_file.close()
-                    save_final_model_if_needed(model, save_dir)
-                    write_done_marker(save_dir)
-                    return  # Early stop exit
+                # If batched
+                avg_val_loss = run_validation_batched(model, epoch, val_loader, device, max_batches=MAX_VALID_BATCH_SIZE)
+
+                # Save best checkpoint
+                if avg_val_loss < best_val_loss - thresh:
+                    best_val_loss = avg_val_loss
+                    patience = 0
+                    model.save_pretrained(save_dir)
+                    checkpoint = {
+                        "epoch": epoch,
+                        "model_state": model.state_dict(),
+                        "optimizer_state": optimizer.state_dict(),
+                        "scheduler_state": scheduler.state_dict() if scheduler else None,
+                        "best_val_loss": best_val_loss,
+                        "patience": patience,
+                    }
+                    torch.save(checkpoint, checkpoint_path)
+                    print(f"✅ Checkpoint saved at step {global_step}")
+                else:
+                    patience += 1
+                    if patience >= max_patience:
+                        print(f"Early stopping (no improvement in {max_patience} validation checks)")
+                        csv_file.close()
+                        save_final_model_if_needed(model, save_dir)
+                        write_done_marker(save_dir)
+                        return  # Early stop exit
 
         # avg_val_loss = total_val_loss / len(val_loader)
 
@@ -209,12 +244,14 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
         # csv_writer.writerow([epoch, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
         # csv_file.flush()
 
-        # Learning rate (use first group)
-        current_lr = optimizer.param_groups[0]['lr']
-        print(f"[Epoch {epoch} | Step {global_step}] train_loss={avg_train_loss:.4f}  "
-              f"val_loss={avg_val_loss:.4f}  lr={current_lr:.2E}")
-        csv_writer.writerow([epoch, global_step, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
-        csv_file.flush()
+                # Learning rate (use first group)
+                current_lr = optimizer.param_groups[0]['lr']
+                print(f"[Epoch {epoch} | Step {global_step}] train_loss={avg_train_loss:.4f}  "
+                      f"val_loss={avg_val_loss:.4f}  lr={current_lr:.2E}")
+                csv_writer.writerow([epoch, global_step, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
+                csv_file.flush()
+
+                # batch_number += 1
 
         # Reset train loss for the next validation interval
         total_train_loss = 0.0
@@ -261,74 +298,6 @@ def prepare_data(args, key):
         prepare_dataset_for_pretrain(f"./model_name_{key}.csv", f"./data/trainable_selfies_{key}.csv")
     print(f"File for training is ready! (trainable_selfies_{key}.csv)")
 
-
-# === New: ClusteredSelfiesDataset ===
-class ClusteredSelfiesDataset(Dataset):
-    def __init__(self, df, tokenizer, mode='pretrain'):
-        """
-        Args:
-            df (pandas.DataFrame): Clustered DataFrame that must contain a 'selfies' column.
-            tokenizer: A tokenizer instance with an .encode() method.
-            mode (str): 'pretrain' or 'finetune'. In 'finetune' mode, additional columns (e.g., 'IC50', 'site_name') are expected.
-        """
-        self.df = df.reset_index(drop=True)  # Ensure indices are 0,1,2,...
-        self.tokenizer = tokenizer
-        self.mode = mode
-
-    def __len__(self):
-        return len(self.df)
-
-    # TODO: 05/22/2025 Get encoding working here!
-    # TODO: 05/23/2025 09:37:00 How does this fit in with padding?
-    def __getitem__(self, idx):
-        """Retrieve an item by index."""
-        selfies_string = self.df.iloc[idx]['selfies']
-        print("selfies_string:", selfies_string)
-        # Correctly tokenize SELFIES using semantic splitting
-        tokens = list(sf.split_selfies(selfies_string))  # ['[C]', '[C]', '[O]']
-        input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(tokens), dtype=torch.long)
-
-        print("input_ids:", input_ids)
-        # Pad/truncate to max_length (e.g., 256)
-        max_length = 256
-        attention_mask = torch.ones(len(input_ids), dtype=torch.long)
-
-        if len(input_ids) < max_length:
-            padding_length = max_length - len(input_ids)
-            input_ids = torch.cat([input_ids, torch.zeros(padding_length, dtype=torch.long)])
-            attention_mask = torch.cat([attention_mask, torch.zeros(padding_length, dtype=torch.long)])
-        else:
-            input_ids = input_ids[:max_length]
-            attention_mask = attention_mask[:max_length]
-
-        print("padded input_ids:", input_ids)
-        if self.mode == 'pretrain':
-            return {
-                'input_ids': input_ids,
-                'attention_mask': attention_mask
-            }
-
-        elif self.mode == 'finetune':
-            IC50 = self.df.iloc[idx]['IC50']
-            inhibition_site = self.df.iloc[idx]['site_name']
-            inhibition_encoded = self.encode_inhibition_site(inhibition_site)
-
-            return {
-                'input_ids': input_ids,
-                'attention_mask': attention_mask,
-                'IC50': torch.tensor([IC50], dtype=torch.float),
-                'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
-            }
-
-    def encode_inhibition_site(self, inhibition_site):
-        inhibition_site = inhibition_site.strip().upper()
-        if 'RVP' in inhibition_site:
-            return 0
-        elif 'RVE' in inhibition_site:
-            return 1
-        return -1
-
-
 # ===================================
 
 def pretrain_BART(hyperparameters_dict, args, key):
@@ -356,21 +325,30 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
     # Load the tokenizer
     # tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer")
-    tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer_12M")
+    tokenizer = PreTrainedTokenizerFast.from_pretrained("./code_run_files/full_tokenizer_finetune_and_pretrain")
 
     # Load DF and Cluster
     # Load and process the DataFrame: apply fingerprinting and clustering
     # TODO 06/14/2025 @ 11:34 AM: MAKE SURE THIS DIRECTORY ALIGNS!
     # df = pd.read_csv(f"./data/trainable_selfies_{key}_FP_CLUSTERED_256perms_7_clustered.csv")
-    df = pd.read_csv(f"./{key}_FP_pre.csv")
+    df = dd.read_parquet(f"./{key}_FP_pre.parquet")
+
+    # df = pd.read_csv(f"./{key}_FP_pre.csv")
     print(df.columns)
     print(df.head(2))
 
     # Sort by cluster and split into training and validation sets
-    df = df.sort_values(by=['Cluster'])
-    mol_count = int(len(df) * 0.9)
-    train_df = df[:mol_count]  # 90% for training
-    valid_df = df[mol_count:]  # 10% for validation
+    # df = df.sort_values(by=['Cluster'])
+    # mol_count = int(len(df) * 0.9)
+    # Split 90% train, 10% validation
+    # train_frac = 0.9
+    # df = df.shuffle(random_state=42, shuffle="tasks")
+    # train_df = df[:mol_count]  # 90% for training
+    # valid_df = df[mol_count:]  # 10% for validation
+    # train_df = df.sample(frac=train_frac, random_state=42)
+    # valid_df = df.drop(train_df.index)
+    train_frac = 0.9
+    train_df, valid_df = df.random_split([train_frac, 1 - train_frac], random_state=42)
 
     # randomize the data and redo it.
     train_df = train_df.sample(frac=1, random_state=42).reset_index(drop=True)

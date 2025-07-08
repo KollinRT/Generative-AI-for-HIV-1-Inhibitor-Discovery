@@ -78,10 +78,10 @@ BART:
     HIDDEN_SIZE: 768
     TRAIN_BATCH_SIZE: 160
     VALID_BATCH_SIZE: 160
-    TRAIN_EPOCHS: 100
+    TRAIN_EPOCHS: 1
     LEARNING_RATE: 5.0e-05
     WEIGHT_DECAY: 0.01
-    MAX_LEN: 128
+    MAX_LEN: 64
     ENCODER_LAYERS: 12
     DECODER_LAYERS: 12
     NUM_ENCODER_ATTENTION_HEADS: 12
@@ -96,7 +96,7 @@ BART:
     criterion: crossentropy
     early_stopping_toggle: true
     early_stopping_threshold: 5.0e-05
-    early_stopping_patience: 5
+    early_stopping_patience: 10
     lr_sched:
       type: linear
       warmup_ratio: 0.1
