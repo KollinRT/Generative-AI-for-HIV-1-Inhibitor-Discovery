@@ -556,7 +556,9 @@ def main():
 
         run_dir = f"./runs/selfies_BART_PRETRAIN_{key}"
 
-        done_flag = os.path.join(run_dir, "done.txt")
+        #done_flag = os.path.join(run_dir, "done.txt")
+        model_save_dir = os.path.join(run_dir, "model")
+        done_flag = os.path.join(model_save_dir, "done.txt")
 
         if os.path.exists(done_flag):
             print(f"✅ Model '{key}' already completed (done.txt found) — skipping retrain.")
