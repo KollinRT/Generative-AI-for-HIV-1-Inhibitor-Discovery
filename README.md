@@ -225,4 +225,7 @@ python3 prepro_ClustFing.py
 
 python3 train_for_pretrain.py --hyperparameters_path="./combined_config.yml"
 
+python3 train_for_pretrain.py --hyperparameters_path="./combined_config_steps.yml"
+
+
 ```

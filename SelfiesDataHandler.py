@@ -6,6 +6,9 @@ from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 from tokenizers import Tokenizer
 from transformers import PreTrainedTokenizerFast
+from torch.utils.data import IterableDataset
+
+import dask.dataframe as dd
 
 def collate_fn_pre(batch):
     # Pretraining mode: items only have 'input_ids'
@@ -95,6 +98,7 @@ class SelfiesDataset(Dataset):
         """Return the total number of entries in the dataset."""
         lengths = self.dataframe.map_partitions(len).compute()
         total_len = lengths.sum()
+        # return int(total_len)
         return total_len
         # return self.dataframe.metadata.num_rows
 
@@ -160,9 +164,12 @@ class SelfiesDataset(Dataset):
         # Mask labels for unmasked tokens:
         mask_token_id = self.tokenizer.mask_token_id
 
-        for i, token_id in enumerate(input_ids):
-            if token_id != mask_token_id:
-                labels[i] = -100  # ignore loss on unmasked tokens
+        # for i, token_id in enumerate(input_ids):
+        #     if token_id != mask_token_id:
+        #         labels[i] = -100  # ignore loss on unmasked tokens
+
+        # Suggested vectorized version:
+        labels = torch.where(input_ids == mask_token_id, labels, torch.full_like(labels, -100))
 
         sample = {
             'input_ids': input_ids,
@@ -173,14 +180,189 @@ class SelfiesDataset(Dataset):
         return sample
 
 
+    # def encode_inhibition_site(self, inhibition_site):
+    #     """Encodes the inhibition site after normalizing string to prevent matching errors."""
+    #     inhibition_site = inhibition_site.strip().upper()  # Normalize by trimming spaces and converting to uppercase
+    #     if 'RVP' in inhibition_site:
+    #         return 0
+    #     elif 'RVE' in inhibition_site:
+    #         return 1
+    #     return -1  # Return -1 for cases where neither RVP nor RVE is found
     def encode_inhibition_site(self, inhibition_site):
-        """Encodes the inhibition site after normalizing string to prevent matching errors."""
-        inhibition_site = inhibition_site.strip().upper()  # Normalize by trimming spaces and converting to uppercase
-        if 'RVP' in inhibition_site:
-            return 0
-        elif 'RVE' in inhibition_site:
-            return 1
-        return -1  # Return -1 for cases where neither RVP nor RVE is found
+        site = inhibition_site.strip().upper()
+        return 0 if 'RVP' in site else 1 if 'RVE' in site else -1
+
+# class SelfiesIterableDataset(IterableDataset):
+#     def __init__(self, parquet_path, tokenizer, partitions=None, mode='pretrain', mask_prob=0.15):
+#         self.parquet_path = parquet_path
+#         self.tokenizer = tokenizer
+#         self.partitions = partitions
+#         self.mode = mode
+#         self.mask_prob = mask_prob
+#
+#         # Load dask dataframe for length calculation
+#         self._df = dd.read_parquet(self.parquet_path)
+#
+#         # Precompute total length for scheduler (cache after first call)
+#         self._length = None
+#
+#     def __len__(self):
+#         if self._length is None:
+#             if self.partitions is not None:
+#                 lengths = []
+#                 for i in self.partitions:
+#                     partition_len = self._df.get_partition(i).map_partitions(len).compute()
+#                     # Extract the scalar if it's a Series
+#                     if isinstance(partition_len, pd.Series):
+#                         partition_len = int(partition_len.iloc[0])
+#                     else:
+#                         partition_len = int(partition_len)
+#                     lengths.append(partition_len)
+#                 self._length = sum(lengths)
+#             else:
+#                 total_length = self._df.map_partitions(len).compute().sum()
+#                 self._length = int(total_length)
+#         return self._length
+#
+#     def corrupt_selfies(self, selfies_str):
+#         tokens = list(sf.split_selfies(selfies_str))
+#         corrupted = []
+#         for token in tokens:
+#             if random.random() < self.mask_prob:
+#                 corrupted.append('[MASK]')
+#             else:
+#                 corrupted.append(token)
+#         return ''.join(corrupted)
+#
+#     def process_row(self, selfies_string):
+#         # Corrupt in pretrain mode
+#         if self.mode == 'pretrain':
+#             corrupted_selfies = self.corrupt_selfies(selfies_string)
+#         else:
+#             corrupted_selfies = selfies_string
+#
+#         # Tokenize
+#         input_tokens = list(sf.split_selfies(corrupted_selfies))
+#         input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(input_tokens), dtype=torch.long)
+#
+#         label_tokens = list(sf.split_selfies(selfies_string))
+#         labels = torch.tensor(self.tokenizer.convert_tokens_to_ids(label_tokens), dtype=torch.long)
+#
+#         attention_mask = torch.ones(len(input_ids), dtype=torch.long)
+#
+#         mask_token_id = self.tokenizer.mask_token_id
+#
+#         # for i, token_id in enumerate(input_ids):
+#         #     if token_id != mask_token_id:
+#         #         labels[i] = -100
+#         labels = torch.where(input_ids == mask_token_id, labels, torch.full_like(labels, -100))
+#
+#         return {
+#             'input_ids': input_ids,
+#             'attention_mask': attention_mask,
+#             'labels': labels
+#         }
+#
+#     def __iter__(self):
+#         df = dd.read_parquet(self.parquet_path)
+#         partitions_to_iter = self.partitions if self.partitions is not None else range(df.npartitions)
+#         for partition_idx in partitions_to_iter:
+#             partition_df = df.get_partition(partition_idx).compute()
+#             for _, row in partition_df.iterrows():
+#                 print(f"Processing row: {row}")
+#                 selfies_string = str(row['selfies'])
+#                 yield self.process_row(selfies_string)
+import torch
+from torch.utils.data import IterableDataset
+import dask.dataframe as dd
+import pandas as pd
+import selfies as sf
+import random
+
+class SelfiesIterableDataset(IterableDataset):
+    def __init__(self, parquet_path, tokenizer, partitions=None, mode='pretrain', mask_prob=0.15, verbose=False):
+        """
+        Args:
+            parquet_path (str): Path to the Parquet file(s).
+            tokenizer: Tokenizer with convert_tokens_to_ids() and mask_token_id attributes.
+            partitions (list[int], optional): Specific partition indices to load. If None, load all partitions.
+            mode (str): 'pretrain' (corrupt input) or other modes (no corruption).
+            mask_prob (float): Probability of masking a token during corruption.
+            verbose (bool): Whether to print debug logs for each row.
+        """
+        self.parquet_path = parquet_path
+        self.tokenizer = tokenizer
+        self.partitions = partitions
+        self.mode = mode
+        self.mask_prob = mask_prob
+        self.verbose = verbose
+
+        # Lazy-load for length computation
+        self._df = dd.read_parquet(self.parquet_path)
+        self._length = None
+
+    def __len__(self):
+        if self._length is None:
+            if self.partitions is not None:
+                partition_lengths = [
+                    int(self._df.get_partition(i).map_partitions(len).compute().sum())
+                    for i in self.partitions
+                ]
+                self._length = sum(partition_lengths)
+            else:
+                self._length = int(self._df.map_partitions(len).compute().sum())
+        return self._length
+
+    def corrupt_selfies(self, selfies_str):
+        """Randomly mask tokens in a SELFIES string."""
+        tokens = list(sf.split_selfies(selfies_str))
+        corrupted = [
+            '[MASK]' if random.random() < self.mask_prob else token
+            for token in tokens
+        ]
+        return ''.join(corrupted)
+
+    def process_row(self, selfies_string):
+        """Corrupt, tokenize, and create model input tensors."""
+        # Corrupt for pretraining
+        corrupted_selfies = self.corrupt_selfies(selfies_string) if self.mode == 'pretrain' else selfies_string
+
+        # Tokenize input
+        input_tokens = list(sf.split_selfies(corrupted_selfies))
+        input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(input_tokens), dtype=torch.long)
+
+        # Tokenize target labels
+        label_tokens = list(sf.split_selfies(selfies_string))
+        labels = torch.tensor(self.tokenizer.convert_tokens_to_ids(label_tokens), dtype=torch.long)
+
+        # Create attention mask
+        attention_mask = torch.ones(len(input_ids), dtype=torch.long)
+
+        # Mask labels where input is not a mask token
+        mask_token_id = self.tokenizer.mask_token_id
+        labels = torch.where(input_ids == mask_token_id, labels, torch.full_like(labels, -100))
+
+        return {
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+            'labels': labels
+        }
+
+    def __iter__(self):
+        """Iterate over all partitions and rows."""
+        # df = dd.read_parquet(self.parquet_path)
+        df = self._df
+        partitions_to_iter = self.partitions if self.partitions is not None else range(df.npartitions)
+
+        for partition_idx in partitions_to_iter:
+            partition_df = df.get_partition(partition_idx).compute()
+
+            for _, row in partition_df.iterrows():
+                selfies_string = str(row['selfies'])
+                if self.verbose:
+                    print(f"[SelfiesDataset] Processing row: {selfies_string[:30]}...")
+
+                yield self.process_row(selfies_string)
 
 class SelfiesTokenizer:
     def __init__(self, vocab):
@@ -197,47 +379,6 @@ class SelfiesTokenizer:
         selfies_string = "".join(symbols)
         return selfies_string.replace("<start>", "").replace("<end>", "").replace("<pad>", "")
 
-class ClusteredSelfiesDataset(Dataset):
-    def __init__(self, df, tokenizer, mode='pretrain'):
-        """
-        Initializes the dataset with a clustered DataFrame and a tokenizer.
-
-        Args:
-            df (pandas.DataFrame): DataFrame containing at least a 'selfies' column.
-                                     (It may also contain additional columns like 'Cluster'.)
-            tokenizer: A tokenizer instance with an .encode() method.
-            mode (str): Either 'pretrain' or 'finetune'. In 'finetune' mode, additional columns
-                        (e.g., 'IC50' and 'site_name') are expected.
-        """
-        # Reset index to ensure integer indexing (0, 1, 2, ...)
-        self.df = df.reset_index(drop=True)
-        self.tokenizer = tokenizer
-        self.mode = mode
-
-    def __len__(self):
-        return len(self.df)
-
-    def __getitem__(self, idx):
-        # Use .iloc to ensure row-based access.
-        row = self.df.iloc[idx]
-        selfies_string = row['selfies']
-        encoded = self.tokenizer.encode(selfies_string)
-
-        if self.mode == 'pretrain':
-            return {'input_ids': torch.tensor(encoded.ids, dtype=torch.long)}
-        # no finetune mode in this pretrain only portion...
-                # elif self.mode == 'finetune':
-                #     # Expect additional columns for fine-tuning.
-                #     IC50 = row.get('IC50', 0)  # default value if missing
-                #     inhibition_site = row.get('site_name', "")
-                #     inhibition_encoded = self.encode_inhibition_site(inhibition_site)
-                #     return {
-                #         'input_ids': torch.tensor(encoded.ids, dtype=torch.long),
-                #         'IC50': torch.tensor([IC50], dtype=torch.float),
-                #         'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
-                #     }
-        else:
-            raise ValueError(f"Invalid mode: {self.mode}")
 
 def mutate_selfies(selfies_string, mutation_rate=0.1):
     symbols = sf.split_selfies(selfies_string)  # Split the SELFIES into individual symbols
@@ -260,197 +401,3 @@ def build_selfies_vocab(selfies_list):
         symbols = sf.split_selfies(selfies)
         unique_symbols.update(symbols)
     return {symbol: i for i, symbol in enumerate(unique_symbols)}
-
-class NNLossHandler:
-    def __init__(self, loss_name="crossentropy", early_stopping_toggle=False,
-                 early_stopping_threshold=None, early_stopping_patience=5, **kwargs):
-        """
-        Initializes the loss handler with the specified loss function and early stopping configuration.
-
-        Args:
-            loss_name (str): Name of the loss function to use. Default is "crossentropy".
-            early_stopping_toggle (bool): Whether to enable early stopping. Default is False.
-            early_stopping_threshold (float): Loss threshold for early stopping. Default is None.
-            early_stopping_patience (int): Number of epochs to wait for improvement before stopping. Default is 5.
-            **kwargs: Additional arguments for initializing specific loss functions.
-        """
-        self.loss_name = loss_name.lower()
-        self.loss_function = self._initialize_loss_function(self.loss_name, **kwargs)
-
-        # Early stopping parameters
-        self.early_stopping_toggle = early_stopping_toggle
-        self.early_stopping_threshold = early_stopping_threshold
-        self.early_stopping_patience = early_stopping_patience
-        self.best_loss = float('inf')
-        self.patience_counter = 0
-
-    def _initialize_loss_function(self, loss_name, **kwargs):
-        """
-        Maps the specified loss name to the corresponding PyTorch loss function.
-
-        Args:
-            loss_name (str): The name of the loss function.
-            **kwargs: Additional arguments for the loss function.
-
-        Returns:
-            A PyTorch loss function instance.
-
-        Raises:
-            ValueError: If an invalid loss function name is provided.
-        """
-        if loss_name == "crossentropy":
-            pad_token_id = kwargs.get("pad_token_id", 1)  # default to 1, can override
-            return torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
-            # return torch.nn.CrossEntropyLoss()
-        elif loss_name == "nll":
-            return torch.nn.NLLLoss()
-        elif loss_name == "poisson":
-            return torch.nn.PoissonNLLLoss()
-        elif loss_name == "kldiv":
-            return torch.nn.KLDivLoss()
-        elif loss_name == "bce":
-            return torch.nn.BCELoss()
-        elif loss_name == "bcewithlogits":
-            return torch.nn.BCEWithLogitsLoss()
-        elif loss_name == "marginranking":
-            return torch.nn.MarginRankingLoss()
-        elif loss_name == "hingeembedding":
-            return torch.nn.HingeEmbeddingLoss()
-        elif loss_name == "multilabelsoftmargin":
-            return torch.nn.MultiLabelSoftMarginLoss()
-        elif loss_name == "smoothl1":
-            return torch.nn.SmoothL1Loss()
-        # TODO NEW: Support more loss functions!
-        else:
-            raise ValueError(f"Invalid loss function name: {loss_name}")
-
-    def get_loss_function(self):
-        """
-        Returns the initialized loss function.
-
-        Returns:
-            A PyTorch loss function instance.
-        """
-        return self.loss_function
-
-    def compute_loss(self, outputs, targets):
-        """
-        Computes the loss given model outputs and targets.
-
-        Args:
-            outputs (torch.Tensor): Model predictions.
-            targets (torch.Tensor): Ground-truth labels.
-
-        Returns:
-            torch.Tensor: Computed loss value.
-        """
-        return self.loss_function(outputs, targets)
-
-    def update_loss_function(self, loss_name, **kwargs):
-        """
-        Updates the loss function dynamically.
-
-        Args:
-            loss_name (str): Name of the new loss function.
-            **kwargs: Additional arguments for initializing the new loss function.
-        """
-        self.loss_name = loss_name.lower()
-        self.loss_function = self._initialize_loss_function(loss_name, **kwargs)
-
-    def check_early_stopping(self, current_loss):
-        """
-        Checks whether early stopping should be triggered.
-
-        Args:
-            current_loss (float): The loss value of the current epoch.
-
-        Returns:
-            bool: True if training should stop, False otherwise.
-        """
-        if not self.early_stopping_toggle:
-            return False
-
-        if self.early_stopping_threshold and current_loss < self.early_stopping_threshold:
-            print(
-                f"Early stopping triggered due to loss threshold: {current_loss:.4f} < {self.early_stopping_threshold:.4f}")
-            return True
-
-        if current_loss < self.best_loss:
-            self.best_loss = current_loss
-            self.patience_counter = 0  # Reset patience counter
-        else:
-            self.patience_counter += 1
-
-        if self.patience_counter >= self.early_stopping_patience:
-            print(f"Early stopping triggered after {self.patience_counter} epochs without improvement.")
-            return True
-
-        return False
-
-
-
-# === New: ClusteredSelfiesDataset ===
-class ClusteredSelfiesDataset(Dataset):
-    def __init__(self, df, tokenizer, mode='pretrain'):
-        """
-        Args:
-            df (pandas.DataFrame): Clustered DataFrame that must contain a 'selfies' column.
-            tokenizer: A tokenizer instance with an .encode() method.
-            mode (str): 'pretrain' or 'finetune'. In 'finetune' mode, additional columns (e.g., 'IC50', 'site_name') are expected.
-        """
-        self.df = df.reset_index(drop=True)  # Ensure indices are 0,1,2,...
-        self.tokenizer = tokenizer
-        self.mode = mode
-
-    def __len__(self):
-        return len(self.df)
-
-    # TODO: 05/22/2025 Get encoding working here!
-    # TODO: 05/23/2025 09:37:00 How does this fit in with padding?
-    def __getitem__(self, idx):
-        """Retrieve an item by index."""
-        selfies_string = self.df.iloc[idx]['selfies']
-        print("selfies_string:", selfies_string)
-        # Correctly tokenize SELFIES using semantic splitting
-        tokens = list(sf.split_selfies(selfies_string))  # ['[C]', '[C]', '[O]']
-        input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(tokens), dtype=torch.long)
-
-        print("input_ids:", input_ids)
-        # Pad/truncate to max_length (e.g., 256)
-        max_length = 256
-        attention_mask = torch.ones(len(input_ids), dtype=torch.long)
-
-        if len(input_ids) < max_length:
-            padding_length = max_length - len(input_ids)
-            input_ids = torch.cat([input_ids, torch.zeros(padding_length, dtype=torch.long)])
-            attention_mask = torch.cat([attention_mask, torch.zeros(padding_length, dtype=torch.long)])
-        else:
-            input_ids = input_ids[:max_length]
-            attention_mask = attention_mask[:max_length]
-
-        print("padded input_ids:", input_ids)
-        if self.mode == 'pretrain':
-            return {
-                'input_ids': input_ids,
-                'attention_mask': attention_mask
-            }
-
-        elif self.mode == 'finetune':
-            IC50 = self.df.iloc[idx]['IC50']
-            inhibition_site = self.df.iloc[idx]['site_name']
-            inhibition_encoded = self.encode_inhibition_site(inhibition_site)
-
-            return {
-                'input_ids': input_ids,
-                'attention_mask': attention_mask,
-                'IC50': torch.tensor([IC50], dtype=torch.float),
-                'inhibition_site': torch.tensor([inhibition_encoded], dtype=torch.long)
-            }
-
-    def encode_inhibition_site(self, inhibition_site):
-        inhibition_site = inhibition_site.strip().upper()
-        if 'RVP' in inhibition_site:
-            return 0
-        elif 'RVE' in inhibition_site:
-            return 1
-        return -1

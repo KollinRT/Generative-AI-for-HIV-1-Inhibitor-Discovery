@@ -63,10 +63,14 @@ if __name__ == "__main__":
 
     # ✅ Set paths
     #model_path = "/home/kollin/Desktop/CollectedRuns_All_And_New/CollectedRuns_All_And_New/CollectedRuns/CLUSTER_RESULTS/extra/selfies_BART_PRETRAIN_model_4/model"
-    model_path = "/home/kollin/Desktop/ThesisBU/WIP_Thesis/runs/selfies_BART_finetune_model_4/model"
+   # model_path = "/home/kollin/Desktop/ThesisBU/WIP_Thesis/runs/selfies_BART_finetune_model_4/model"
+    #model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/selfies_BART_PRETRAIN_model_4_warmup_namelater_DELETETHIS/model"
+    #model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/runs/selfies_BART_PRETRAIN_model_4_warmup_1_e-6_50/model"
+    # model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/runs/selfies_BART_PRETRAIN_model_4_warmup_30_e-6/model"
+    model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/runs/selfies_BART_PRETRAIN_model_4_warmup/model"
     model = load_model(model_path)
-    tokenizer = load_tokenizer("selfies_word_tokenizer_12M")
-
+    #tokenizer = load_tokenizer("selfies_word_tokenizer_12M")
+    tokenizer = load_tokenizer("full_tokenizer_finetune_and_pretrain")
     # ✅ Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -78,7 +82,7 @@ if __name__ == "__main__":
     #input_text = "[C] [C] [O]"
     #input_text = "[C] [C] [Branch1_1] [O] [C] [C] [N] [C] [=O] [C] [C] [Ring1] [C] [C] [=O] [O]"
     #input_text = "[C]"
-    input_text = "<s> [C]"
+    input_text = "<s>"
     #
     # # 1. Manual split
     # tokens = input_text.split()
@@ -104,7 +108,7 @@ if __name__ == "__main__":
 
     generated_ids = model.generate(
         input_ids,
-        max_length=500,
+        max_length=32,
         num_return_sequences=50,
         do_sample=True,  # ✅ Enable sampling (adds randomness)
         temperature=1.0,  # ✅ Increase randomness (higher values = more diverse outputs)

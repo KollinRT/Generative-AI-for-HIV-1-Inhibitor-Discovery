@@ -1,46 +1,29 @@
 import argparse
 import csv
+import itertools
 import os
 from os.path import isfile
 
-import pandas as pd
 import dask.dataframe as dd
+import pandas as pd
 import selfies as sf
 import torch
 from pytorch_lamb import Lamb
 from tokenizers import Tokenizer
 from torch.amp import autocast, GradScaler
-import torch.nn as nn
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from transformers import BartForConditionalGeneration, BartConfig, PreTrainedTokenizerFast
 
-from SelfiesDataHandler import SelfiesDataset, collate_fn
-from utils import save_final_model_if_needed, write_done_marker, make_optimizer, make_scheduler, load_hyperparameters
-
-import glob
-
+from SelfiesDataHandler import collate_fn, SelfiesIterableDataset
+from utils import save_final_model_if_needed, write_done_marker, make_optimizer, make_scheduler, load_hyperparameters, \
+    make_scheduler_steps
 
 gpu_used = "B200"
+
+
 # gpu_used = "4090"
-
-VAL_EVERY_STEPS = 100
-# MAX_BATCHES_VAL = 100
-MAX_VALID_BATCH_SIZE = 20
-
-def run_validation(model, epoch, val_loader, device):
-    model.eval()
-    total_val_loss = 0.0
-    with torch.no_grad():
-        # for batch in tqdm(val_loader, desc="Validating"):
-        for batch in tqdm(val_loader, desc=f"Epoch {epoch} [val]"):
-            batch = {k: v.to(device) for k, v in batch.items()}
-            loss = model(input_ids=batch['input_ids'],
-                         attention_mask=batch['attention_mask'],
-                         labels=batch['input_ids']).loss
-            total_val_loss += loss.item()
-    return total_val_loss / len(val_loader)
 
 def run_validation_batched(model, epoch, val_loader, device, max_batches=None):
     model.eval()
@@ -81,7 +64,7 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
-    #if torch.cuda.device_count() > 1:
+    # if torch.cuda.device_count() > 1:
     #    print("Let's use", torch.cuda.device_count(), "GPUs!")
     #    model = nn.DataParallel(model)
     model.to(device)
@@ -162,25 +145,13 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
 
             print(f"step_in_epoch: {step_in_epoch}\nglobal_step: {global_step}")
 
-        # avg_train_loss = total_train_loss / len(train_loader)
-
-        # Validation
-        # model.eval()
-        # total_val_loss = 0.0
-        # with torch.no_grad():
-        #     # for batch in val_loader:
-        #     for batch in tqdm(val_loader, desc=f"Epoch {epoch} [val]"):
-        #         batch = {k: v.to(device) for k, v in batch.items()}
-        #         loss = model(input_ids=batch['input_ids'],
-        #                      attention_mask=batch['attention_mask'],
-        #                      labels=batch['input_ids']).loss
-        #         total_val_loss += loss.item()
             if global_step % VAL_EVERY_STEPS == 0:
                 avg_train_loss = total_train_loss / step_in_epoch
                 # avg_val_loss = run_validation(model, epoch, val_loader, device)
 
                 # If batched
-                avg_val_loss = run_validation_batched(model, epoch, val_loader, device, max_batches=MAX_VALID_BATCH_SIZE)
+                avg_val_loss = run_validation_batched(model, epoch, val_loader, device,
+                                                      max_batches=MAX_VALID_BATCH_SIZE)
 
                 # Save best checkpoint
                 if avg_val_loss < best_val_loss - thresh:
@@ -206,49 +177,12 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
                         write_done_marker(save_dir)
                         return  # Early stop exit
 
-        # avg_val_loss = total_val_loss / len(val_loader)
-
-        # # Save if new best model
-        # if avg_val_loss < best_val_loss - thresh:
-        #     best_val_loss = avg_val_loss
-        #     patience = 0
-        #     model.save_pretrained(save_dir)
-        #
-        #     checkpoint = {
-        #         "epoch": epoch,
-        #         "model_state": model.state_dict(),
-        #         "optimizer_state": optimizer.state_dict(),
-        #         "scheduler_state": scheduler.state_dict() if scheduler else None,
-        #         "best_val_loss": best_val_loss,
-        #         "patience": patience,
-        #     }
-        #     torch.save(checkpoint, os.path.join(save_dir, "checkpoint_resume.pt"))
-        #     print(f"✅ Checkpoint saved at epoch {epoch}")
-        # else:
-        #     patience += 1
-        #     if patience >= max_patience:
-        #         print(f"? Early stopping (no improvement in {max_patience} epochs)")
-        #         break
-
-        # Scheduler step
-        # # === Only for ReduceLROnPlateau or OneCycleLR ===
-        # if scheduler and isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-        #     scheduler.step(avg_val_loss)
-        # elif scheduler and isinstance(scheduler, torch.optim.lr_scheduler.OneCycleLR):
-        #     scheduler.step(avg_val_loss)
-
-        # #     Logging
-        # current_lr = optimizer.param_groups[0]['lr']
-        # print(f"[Epoch {epoch}] train_loss={avg_train_loss:.4f}  "
-        #       f"val_loss={avg_val_loss:.4f}  lr={current_lr:.2E}")
-        # csv_writer.writerow([epoch, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
-        # csv_file.flush()
-
                 # Learning rate (use first group)
                 current_lr = optimizer.param_groups[0]['lr']
                 print(f"[Epoch {epoch} | Step {global_step}] train_loss={avg_train_loss:.4f}  "
                       f"val_loss={avg_val_loss:.4f}  lr={current_lr:.2E}")
-                csv_writer.writerow([epoch, global_step, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
+                csv_writer.writerow(
+                    [epoch, global_step, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
                 csv_file.flush()
 
                 # batch_number += 1
@@ -262,6 +196,189 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
 
     # Final model save (if needed) + mark training complete
     save_final_model_if_needed(model, save_dir)
+    write_done_marker(save_dir)
+
+
+def train_for_pretrain_steps(model, train_loader, val_loader, cfg, save_dir, csv_file_path):
+    """
+    model        : a BartForConditionalGeneration
+    train_loader : DataLoader for pretrain set
+    val_loader   : DataLoader for validation set
+    cfg          : one of your hyperparameter dicts (e.g. hyperparameters_dict[key])
+    save_dir     : where to save the best model
+    csv_file_path: writes to the designated csv_file_path
+    """
+    # === Hyperparameters ===
+    max_training_steps = cfg["MAX_TRAINING_STEPS"]
+    validate_every_steps = cfg["VAL_EVERY_STEPS"]
+    early_stopping_threshold = cfg["early_stopping_threshold"]
+    max_patience = cfg["early_stopping_patience"]
+    max_valid_batches = cfg.get("MAX_VALID_BATCH_SIZE")
+
+    # === Setup ===
+    train_iterator = itertools.cycle(train_loader)  # Infinite looping
+    os.makedirs(save_dir, exist_ok=True)
+    csv_file = open(csv_file_path, "w", newline="")
+    csv_writer = csv.writer(csv_file)
+    # csv_writer.writerow(["epoch", "train_loss", "val_loss", "learning_rate"])
+    csv_writer.writerow(["epoch", "global_step", "train_loss", "val_loss", "learning_rate"])
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Device: {device}")
+    # if torch.cuda.device_count() > 1:
+    #    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    #    model = nn.DataParallel(model)
+    model.to(device)
+
+    optimizer = make_optimizer(model, cfg)
+    print(f"length of train_loader: {len(train_loader)}")
+    # print(f"Number of epochs: {cfg['TRAIN_EPOCHS']}")
+
+
+    scheduler = make_scheduler_steps(optimizer, cfg, max_training_steps)
+
+    # === Checkpoint Resume ===
+    # Check for checkpoint
+    checkpoint_path = os.path.join(save_dir, "checkpoint_resume.pt")
+    global_step = 0
+    best_val_loss = float('inf')
+    start_epoch = 1
+
+    if os.path.exists(checkpoint_path):
+        print(f"🔁 Resuming from checkpoint: {checkpoint_path}")
+        checkpoint = torch.load(checkpoint_path)
+        model.load_state_dict(checkpoint["model_state"])
+        optimizer.load_state_dict(checkpoint["optimizer_state"])
+        if scheduler and checkpoint.get("scheduler_state"):
+            scheduler.load_state_dict(checkpoint["scheduler_state"])
+        best_val_loss = checkpoint["best_val_loss"]
+        patience = checkpoint["patience"]
+        global_step = checkpoint["step"] + 1
+    else:
+        # Back to config setup
+        patience = 0
+
+    # === Mixed Precision ===
+    use_amp = (gpu_used == "B200")
+    scaler = GradScaler("cuda") if use_amp else None
+
+    total_train_loss = 0.0
+    step_in_epoch = 0
+
+    # === Main Training Loop ===
+    while global_step < max_training_steps:
+        # === Training ===
+        model.train()
+
+        # === One batch ===
+        batch = next(train_iterator)
+        batch = {k: v.to(device) for k, v in batch.items()}
+
+        # # === Forward / Backward pass ===
+        if use_amp:
+            with autocast("cuda"):
+                outputs = model(**batch)
+                loss = outputs.loss
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            clip_grad_norm_(model.parameters(), max_norm=1.0)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            outputs = model(**batch)
+            loss = outputs.loss
+            loss.backward()
+            clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+
+        optimizer.zero_grad()
+
+        if scheduler and not isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            scheduler.step()
+
+        total_train_loss += loss.item()
+        global_step += 1
+        step_in_epoch += 1
+
+        # === Validation, Logging, Checkpointing ===
+        if global_step % validate_every_steps == 0:
+            avg_train_loss = total_train_loss / step_in_epoch
+            avg_val_loss = run_validation_batched(model, global_step, val_loader, device, max_batches=max_valid_batches)
+
+            # Save best model
+            if avg_val_loss < best_val_loss - early_stopping_threshold:
+                best_val_loss = avg_val_loss
+                patience = 0
+                model.save_pretrained(save_dir)
+                torch.save({
+                    "step": global_step,
+                    "model_state": model.state_dict(),
+                    "optimizer_state": optimizer.state_dict(),
+                    "scheduler_state": scheduler.state_dict() if scheduler else None,
+                    "best_val_loss": best_val_loss,
+                    "patience": patience,
+                }, checkpoint_path)
+                print(f"✅ Checkpoint saved at step {global_step}")
+            else:
+                patience += 1
+                if cfg.get("early_stopping_toggle", True):
+                    if patience >= max_patience:
+                        print(f"⛔ Early stopping triggered after {max_patience} validations with no improvement.")
+                        csv_file.close()
+                        save_final_model_if_needed(model, save_dir)
+                        write_done_marker(save_dir)
+                        return
+
+            # Logging
+            current_lr = optimizer.param_groups[0]['lr']
+            pseudo_epoch = global_step * train_loader.batch_size // len(train_loader.dataset)
+            print(f"[Epoch {pseudo_epoch} | Step {global_step}] train_loss={avg_train_loss:.4f}  "
+                  f"val_loss={avg_val_loss:.4f}  lr={current_lr:.2E}")
+            csv_writer.writerow(
+                [pseudo_epoch, global_step, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
+            csv_file.flush()
+
+            # Reset counters after validation
+            total_train_loss = 0.0
+            step_in_epoch = 0
+
+    # === Training Complete ===
+    csv_file.close()
+
+    # Save final model separately
+    # final_model_dir = os.path.join(save_dir, "final_model")
+    # os.makedirs(final_model_dir, exist_ok=True)
+    # model.save_pretrained(final_model_dir)
+    # print(f"💾 Final model saved to {final_model_dir}")
+    model.save_pretrained(os.path.join(save_dir, f"final_step_{global_step}"))
+
+    # Save done marker in root save_dir
+    write_done_marker(save_dir)
+
+    """
+    # === Training Complete ===
+    csv_file.close()
+    
+    # Save final model separately
+    final_model_dir = os.path.join(save_dir, "final_model")
+    os.makedirs(final_model_dir, exist_ok=True)
+    model.save_pretrained(final_model_dir)
+    print(f"💾 Final model saved to {final_model_dir}")
+    
+    # Mark training as complete
+    write_done_marker(save_dir)
+
+    
+    If you're ever going to resume training from the final model, you might also want to save:
+    torch.save({
+    "model_state": model.state_dict(),
+    "optimizer_state": optimizer.state_dict(),
+    "scheduler_state": scheduler.state_dict() if scheduler else None,
+}, os.path.join(final_model_dir, "final_checkpoint.pt"))
+
+    
+    """
+    # save_final_model_if_needed(model, save_dir)
     write_done_marker(save_dir)
 
 
@@ -298,6 +415,7 @@ def prepare_data(args, key):
         prepare_dataset_for_pretrain(f"./model_name_{key}.csv", f"./data/trainable_selfies_{key}.csv")
     print(f"File for training is ready! (trainable_selfies_{key}.csv)")
 
+
 # ===================================
 
 def pretrain_BART(hyperparameters_dict, args, key):
@@ -327,11 +445,13 @@ def pretrain_BART(hyperparameters_dict, args, key):
     # tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer")
     tokenizer = PreTrainedTokenizerFast.from_pretrained("./code_run_files/full_tokenizer_finetune_and_pretrain")
 
+    #parquet_path = f"./{key}_FP_pre.parquet"
+    parquet_path = "./model_4_warmup_FP_pre.parquet"
     # Load DF and Cluster
     # Load and process the DataFrame: apply fingerprinting and clustering
     # TODO 06/14/2025 @ 11:34 AM: MAKE SURE THIS DIRECTORY ALIGNS!
     # df = pd.read_csv(f"./data/trainable_selfies_{key}_FP_CLUSTERED_256perms_7_clustered.csv")
-    df = dd.read_parquet(f"./{key}_FP_pre.parquet")
+    df = dd.read_parquet(parquet_path)
 
     # df = pd.read_csv(f"./{key}_FP_pre.csv")
     print(df.columns)
@@ -354,27 +474,34 @@ def pretrain_BART(hyperparameters_dict, args, key):
     train_df = train_df.sample(frac=1, random_state=42).reset_index(drop=True)
     valid_df = valid_df.sample(frac=1, random_state=42).reset_index(drop=True)
 
-    # Instead of passing the raw DataFrame to DataLoader, wrap it in the new ClusteredSelfiesDataset
-    train_dataset = SelfiesDataset(train_df, tokenizer, mode='pretrain')
-    valid_dataset = SelfiesDataset(valid_df, tokenizer, mode='pretrain')
+    # # Instead of passing the raw DataFrame to DataLoader, wrap it in the new ClusteredSelfiesDataset
+    df = dd.read_parquet(parquet_path)
+    n_partitions = df.npartitions
+    # train_dataset = SelfiesDataset(train_df, tokenizer, mode='pretrain')
+    # valid_dataset = SelfiesDataset(valid_df, tokenizer, mode='pretrain')
+    train_partitions = list(range(int(n_partitions * 0.9)))  # first 90%
+    val_partitions = list(range(int(n_partitions * 0.9), n_partitions))  # last 10%
+
+    train_dataset = SelfiesIterableDataset(parquet_path, tokenizer, partitions=train_partitions, mode='pretrain')
+    valid_dataset = SelfiesIterableDataset(parquet_path, tokenizer, partitions=val_partitions, mode='pretrain')
 
     use_amp = (gpu_used == "B200")
     if use_amp:
         # B200
-        pretrain_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True,
+        pretrain_loader = DataLoader(train_dataset, batch_size=train_batch_size,
                                      collate_fn=lambda x: collate_fn(x, mode='pre'),
-                                     num_workers=10, pin_memory=True
+                                     num_workers=0, pin_memory=True
                                      )
-        val_loader = DataLoader(valid_dataset, batch_size=val_batch_size, shuffle=True,
+        val_loader = DataLoader(valid_dataset, batch_size=val_batch_size,
                                 collate_fn=lambda x: collate_fn(x, mode='pre'),
-                                num_workers=10, pin_memory=True
+                                num_workers=0, pin_memory=True
                                 )
     else:
         # 4090
-        pretrain_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True,
+        pretrain_loader = DataLoader(train_dataset, batch_size=train_batch_size,
                                      collate_fn=lambda x: collate_fn(x, mode='pre')
                                      )
-        val_loader = DataLoader(valid_dataset, batch_size=val_batch_size, shuffle=True,
+        val_loader = DataLoader(valid_dataset, batch_size=val_batch_size,
                                 collate_fn=lambda x: collate_fn(x, mode='pre')
                                 )
 
@@ -401,7 +528,8 @@ def pretrain_BART(hyperparameters_dict, args, key):
     print(train_df.head(2))
 
     # Training Loop START
-    train_for_pretrain(model, pretrain_loader, val_loader, current_config, model_save_dir, csv_file_path)
+    # train_for_pretrain(model, pretrain_loader, val_loader, current_config, model_save_dir, csv_file_path)
+    train_for_pretrain_steps(model, pretrain_loader, val_loader, current_config, model_save_dir, csv_file_path)
 
 
 def main():
