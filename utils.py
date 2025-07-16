@@ -6,6 +6,7 @@ from pytorch_lamb import Lamb
 import random
 import selfies as sf
 from torch.utils.data import Dataset
+import torch_optimizer as optim
 
 def diff_to_string(base_config, other_config):
     """
@@ -81,6 +82,7 @@ def make_optimizer(model, cfg):
         return torch.optim.Adadelta(model.parameters(), lr=lr)
     elif opt == "adafactor":
         return torch.optim.Adafactor(model.parameters(), lr=lr)
+    # elif opt == ""
     else:
         raise ValueError(f"Unknown optimizer: {opt}")
 

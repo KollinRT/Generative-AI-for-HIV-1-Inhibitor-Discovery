@@ -299,6 +299,12 @@ def train_for_pretrain_steps(model, train_loader, val_loader, cfg, save_dir, csv
         total_train_loss += loss.item()
         global_step += 1
         step_in_epoch += 1
+        
+        # Potential way to prevent a memory leak
+        del batch, outputs, loss
+        torch.cuda.empty_cache()
+        # End block
+
 
         # === Validation, Logging, Checkpointing ===
         if global_step % validate_every_steps == 0:
