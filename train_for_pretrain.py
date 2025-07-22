@@ -218,10 +218,18 @@ def train_for_pretrain_steps(model, train_loader, val_loader, cfg, save_dir, csv
     # === Setup ===
     train_iterator = itertools.cycle(train_loader)  # Infinite looping
     os.makedirs(save_dir, exist_ok=True)
-    csv_file = open(csv_file_path, "w", newline="")
+    # csv_file = open(csv_file_path, "w", newline="")
+    # csv_writer = csv.writer(csv_file)
+    # # csv_writer.writerow(["epoch", "train_loss", "val_loss", "learning_rate"])
+    # csv_writer.writerow(["epoch", "global_step", "train_loss", "val_loss", "learning_rate"])
+
+    # Safe CSV setup (no overwrite)
+    write_header = not os.path.exists(csv_file_path) or os.stat(csv_file_path).st_size == 0
+    csv_file = open(csv_file_path, "a", newline="")
     csv_writer = csv.writer(csv_file)
-    # csv_writer.writerow(["epoch", "train_loss", "val_loss", "learning_rate"])
-    csv_writer.writerow(["epoch", "global_step", "train_loss", "val_loss", "learning_rate"])
+
+    if write_header:
+        csv_writer.writerow(["epoch", "global_step", "train_loss", "val_loss", "learning_rate"])
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
@@ -257,6 +265,10 @@ def train_for_pretrain_steps(model, train_loader, val_loader, cfg, save_dir, csv
     else:
         # Back to config setup
         patience = 0
+
+    # if os.path.exists(csv_file_path):
+    #     df = pd.read_csv(csv_file_path)
+    #     global_step = df.loc[-1, "global_step"]
 
     # === Mixed Precision ===
     use_amp = (gpu_used == "B200")
