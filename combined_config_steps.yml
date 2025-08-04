@@ -387,3 +387,185 @@ BART:
     lr_sched:
       type: cosine
       warmup_ratio: 0.1
+
+
+  model_small_adamw_earlyS_COSINE:
+    HIDDEN_SIZE: 768
+    TRAIN_BATCH_SIZE: 300
+    VALID_BATCH_SIZE: 300
+    MAX_TRAINING_STEPS: 400000
+    VAL_EVERY_STEPS: 500
+    MAX_VALID_BATCH_SIZE: 64
+    LEARNING_RATE: 1.0e-05
+    WEIGHT_DECAY: 0.01
+    MAX_LEN: 64
+    ENCODER_LAYERS: 8
+    DECODER_LAYERS: 8
+    NUM_ENCODER_ATTENTION_HEADS: 8
+    NUM_DECODER_ATTENTION_HEADS: 8
+    ENCODER_FFN_DIM: 2048
+    DECODER_FFN_DIM: 2048
+    MAX_POSITION_EMBEDDINGS: 514
+    NUM_ATTENTION_HEADS: 8
+    NUM_HIDDEN_LAYERS: 8
+    TYPE_VOCAB_SIZE: 1
+    optimizer: adamw
+    criterion: crossentropy
+    early_stopping_toggle: true
+    early_stopping_threshold: 5.0e-05
+    early_stopping_patience: 50
+    lr_sched:
+      type: cosine
+      warmup_ratio: 0.1
+
+
+  model_small_adamw_earlyS_COSINE_long:
+    HIDDEN_SIZE: 768
+    TRAIN_BATCH_SIZE: 300
+    VALID_BATCH_SIZE: 300
+    MAX_TRAINING_STEPS: 400000
+    VAL_EVERY_STEPS: 500
+    MAX_VALID_BATCH_SIZE: 64
+    LEARNING_RATE: 1.0e-05
+    WEIGHT_DECAY: 0.01
+    MAX_LEN: 64
+    ENCODER_LAYERS: 8
+    DECODER_LAYERS: 8
+    NUM_ENCODER_ATTENTION_HEADS: 8
+    NUM_DECODER_ATTENTION_HEADS: 8
+    ENCODER_FFN_DIM: 2048
+    DECODER_FFN_DIM: 2048
+    MAX_POSITION_EMBEDDINGS: 514
+    NUM_ATTENTION_HEADS: 8
+    NUM_HIDDEN_LAYERS: 8
+    TYPE_VOCAB_SIZE: 1
+    optimizer: adamw
+    criterion: crossentropy
+    early_stopping_toggle: true
+    early_stopping_threshold: 1.0e-06
+    early_stopping_patience: 75
+    lr_sched:
+      type: cosine
+      warmup_ratio: 0.1
+
+  model_small_adamw_earlyS_inversesqrt_fix_overfit:
+    HIDDEN_SIZE: 768
+    TRAIN_BATCH_SIZE: 300
+    VALID_BATCH_SIZE: 300
+    MAX_TRAINING_STEPS: 400000
+    VAL_EVERY_STEPS: 500
+    MAX_VALID_BATCH_SIZE: 64
+    LEARNING_RATE: 5.0e-06
+    WEIGHT_DECAY: 0.01
+    MAX_LEN: 64
+    ENCODER_LAYERS: 8
+    DECODER_LAYERS: 8
+    NUM_ENCODER_ATTENTION_HEADS: 8
+    NUM_DECODER_ATTENTION_HEADS: 8
+    ENCODER_FFN_DIM: 2048
+    DECODER_FFN_DIM: 2048
+    MAX_POSITION_EMBEDDINGS: 514
+    NUM_ATTENTION_HEADS: 8
+    NUM_HIDDEN_LAYERS: 8
+    TYPE_VOCAB_SIZE: 1
+    optimizer: adamw
+    criterion: crossentropy
+    early_stopping_toggle: true
+    early_stopping_threshold: 5.0e-05
+    early_stopping_patience: 30
+    lr_sched:
+      type: inverse_sqrt
+      warmup_ratio: 0.05
+
+  model_small_adamw_earlyS_inversesqrt_fix_overfit_higherdropout:
+    HIDDEN_SIZE: 768
+    TRAIN_BATCH_SIZE: 160
+    VALID_BATCH_SIZE: 160
+    MAX_TRAINING_STEPS: 400000
+    VAL_EVERY_STEPS: 500
+    MAX_VALID_BATCH_SIZE: 64
+    LEARNING_RATE: 5.0e-06
+    WEIGHT_DECAY: 0.01
+    DROPOUT: 0.2
+    MAX_LEN: 64
+    ENCODER_LAYERS: 8
+    DECODER_LAYERS: 8
+    NUM_ENCODER_ATTENTION_HEADS: 8
+    NUM_DECODER_ATTENTION_HEADS: 8
+    ENCODER_FFN_DIM: 2048
+    DECODER_FFN_DIM: 2048
+    MAX_POSITION_EMBEDDINGS: 514
+    NUM_ATTENTION_HEADS: 8
+    NUM_HIDDEN_LAYERS: 8
+    TYPE_VOCAB_SIZE: 1
+    optimizer: adamw
+    criterion: crossentropy
+    early_stopping_toggle: true
+    early_stopping_threshold: 5.0e-05
+    early_stopping_patience: 10
+    lr_sched:
+      type: inverse_sqrt
+      warmup_ratio: 0.05
+
+#  model_small_adamw_earlyS_inversesqrt:
+#    HIDDEN_SIZE: 768
+#    TRAIN_BATCH_SIZE: 300
+#    VALID_BATCH_SIZE: 300
+#    MAX_TRAINING_STEPS: 400000
+#    VAL_EVERY_STEPS: 500
+#    MAX_VALID_BATCH_SIZE: 64
+#    LEARNING_RATE: 1.0e-05
+#    WEIGHT_DECAY: 0.01
+#    MAX_LEN: 64
+#    ENCODER_LAYERS: 8
+#    DECODER_LAYERS: 8
+#    NUM_ENCODER_ATTENTION_HEADS: 8
+#    NUM_DECODER_ATTENTION_HEADS: 8
+#    ENCODER_FFN_DIM: 2048
+#    DECODER_FFN_DIM: 2048
+#    MAX_POSITION_EMBEDDINGS: 514
+#    NUM_ATTENTION_HEADS: 8
+#    NUM_HIDDEN_LAYERS: 8
+#    TYPE_VOCAB_SIZE: 1
+#    optimizer: adamw
+#    criterion: crossentropy
+#    early_stopping_toggle: true
+#    early_stopping_threshold: 5.0e-05
+#    early_stopping_patience: 50
+#    lr_sched:
+#      type: inverse_sqrt
+#      warmup_ratio: 0.1
+
+  model_small_adamw_earlyS_inversesqrt_long:
+    HIDDEN_SIZE: 768
+    TRAIN_BATCH_SIZE: 300
+    VALID_BATCH_SIZE: 300
+    MAX_TRAINING_STEPS: 400000
+    VAL_EVERY_STEPS: 500
+    MAX_VALID_BATCH_SIZE: 64
+    LEARNING_RATE: 1.0e-05
+    WEIGHT_DECAY: 0.01
+    MAX_LEN: 64
+    ENCODER_LAYERS: 8
+    DECODER_LAYERS: 8
+    NUM_ENCODER_ATTENTION_HEADS: 8
+    NUM_DECODER_ATTENTION_HEADS: 8
+    ENCODER_FFN_DIM: 2048
+    DECODER_FFN_DIM: 2048
+    MAX_POSITION_EMBEDDINGS: 514
+    NUM_ATTENTION_HEADS: 8
+    NUM_HIDDEN_LAYERS: 8
+    TYPE_VOCAB_SIZE: 1
+    optimizer: adamw
+    criterion: crossentropy
+    early_stopping_toggle: true
+    early_stopping_threshold: 1.0e-06
+    early_stopping_patience: 75
+    lr_sched:
+      type: inverse_sqrt
+      warmup_ratio: 0.1
+
+
+
+
+

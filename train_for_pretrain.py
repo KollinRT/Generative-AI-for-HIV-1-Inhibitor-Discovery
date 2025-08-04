@@ -20,6 +20,9 @@ from SelfiesDataHandler import collate_fn, SelfiesIterableDataset
 from utils import save_final_model_if_needed, write_done_marker, make_optimizer, make_scheduler, load_hyperparameters, \
     make_scheduler_steps
 
+# BACKUP_EVERY_BATCH = 400
+BACKUP_EVERY_BATCH = 10000
+
 gpu_used = "B200"
 
 
@@ -145,7 +148,7 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
 
             print(f"step_in_epoch: {step_in_epoch}\nglobal_step: {global_step}")
 
-            if global_step % VAL_EVERY_STEPS == 0:
+            if global_step % validate_every_steps == 0:
                 avg_train_loss = total_train_loss / step_in_epoch
                 # avg_val_loss = run_validation(model, epoch, val_loader, device)
 
@@ -262,9 +265,19 @@ def train_for_pretrain_steps(model, train_loader, val_loader, cfg, save_dir, csv
         best_val_loss = checkpoint["best_val_loss"]
         patience = checkpoint["patience"]
         global_step = checkpoint["step"] + 1
+
+        # ✅ ADD THIS BLOCK HERE — right after loading global_step
+        if os.path.exists(csv_file_path):
+            with open(csv_file_path, "r") as f:
+                last_row = list(csv.reader(f))[-1]
+                last_logged_step = int(last_row[1])  # assuming 'global_step' is column index 1
+                if global_step <= last_logged_step:
+                    print(f"⚠️ Warning: Resuming at step {global_step} but last logged step is {last_logged_step}.")
+                    print("🧹 You might want to clean or truncate the CSV to prevent mixing runs.")
     else:
         # Back to config setup
         patience = 0
+
 
     # if os.path.exists(csv_file_path):
     #     df = pd.read_csv(csv_file_path)
@@ -347,6 +360,20 @@ def train_for_pretrain_steps(model, train_loader, val_loader, cfg, save_dir, csv
                         write_done_marker(save_dir)
                         return
 
+            # Steps for mini-backup...
+            # ✅ Mini-backup every N validation steps
+            if global_step % (validate_every_steps * BACKUP_EVERY_BATCH // validate_every_steps) == 0:
+                backup_path = os.path.join(save_dir, f"backup_step_{global_step}.pt")
+                torch.save({
+                    "step": global_step,
+                    "model_state": model.state_dict(),
+                    "optimizer_state": optimizer.state_dict(),
+                    "scheduler_state": scheduler.state_dict() if scheduler else None,
+                    "best_val_loss": best_val_loss,
+                    "patience": patience,
+                }, backup_path)
+                print(f"💾 Backup checkpoint saved at step {global_step} → {backup_path}")
+
             # Logging
             current_lr = optimizer.param_groups[0]['lr']
             pseudo_epoch = global_step * train_loader.batch_size // len(train_loader.dataset)
@@ -397,7 +424,21 @@ def train_for_pretrain_steps(model, train_loader, val_loader, cfg, save_dir, csv
     
     """
     # save_final_model_if_needed(model, save_dir)
+    # write_done_marker(save_dir)
+    # Save final model separately
+    final_model_dir = os.path.join(save_dir, "final_model")
+    os.makedirs(final_model_dir, exist_ok=True)
+    model.save_pretrained(final_model_dir)
+    print(f"💾 Final model saved to {final_model_dir}")
+
+    # Mark training as complete
     write_done_marker(save_dir)
+
+    torch.save({
+        "model_state": model.state_dict(),
+        "optimizer_state": optimizer.state_dict(),
+        "scheduler_state": scheduler.state_dict() if scheduler else None,
+    }, os.path.join(final_model_dir, "final_checkpoint.pt"))
 
 
 def prepare_data(args, key):
@@ -533,6 +574,7 @@ def pretrain_BART(hyperparameters_dict, args, key):
         encoder_ffn_dim=hyperparameters_dict[key]["ENCODER_FFN_DIM"],
         decoder_ffn_dim=hyperparameters_dict[key]["DECODER_FFN_DIM"],
         hidden_size=hyperparameters_dict[key]["HIDDEN_SIZE"],
+        dropout=hyperparameters_dict[key]["DROPOUT"],  # TODO: 08/3/25 ADD AS A PARAMETER
         pad_token_id=tokenizer.pad_token_id,
         bos_token_id=tokenizer.bos_token_id,
         eos_token_id=tokenizer.eos_token_id,
@@ -540,6 +582,12 @@ def pretrain_BART(hyperparameters_dict, args, key):
     )
     model = BartForConditionalGeneration(config)
     # model = torch.compile(model)
+
+    """
+    # Finish fleshing this out
+    encoder_layerdrop=hyperparameters_dict[key]["ENCODER_LAYERDROP"]
+    decoder_layerdrop=hyperparameters_dict[key]["DECODER_LAYERDROP"]
+    """
 
     # Print DataFrame info for debugging
     print("Final training DataFrame:")
