@@ -46,12 +46,26 @@ def encode_differences_to_string(base_model_name, base_config, other_config):
     return "__".join(parts)
 
 
-def save_final_model_if_needed(model, save_dir):
-    """Ensure the final model is saved if no best version was saved."""
-    model_path = os.path.join(save_dir, "pytorch_model.bin")
-    if not os.path.exists(model_path):
-        print("🟡 No best model saved. Saving final model manually.")
-        model.save_pretrained(save_dir)
+# def save_final_model_if_needed(model, save_dir):
+#     """Ensure the final model is saved if no best version was saved."""
+#     model_path = os.path.join(save_dir, "pytorch_model.bin")
+#     if not os.path.exists(model_path):
+#         print("🟡 No best model saved. Saving final model manually.")
+#         model.save_pretrained(save_dir)
+
+
+def save_final_model_if_needed(model, save_dir, optimizer, scheduler):
+    final_model_dir = os.path.join(save_dir, "final_model")
+    os.makedirs(final_model_dir, exist_ok=True)
+
+    print(f"💾 Saving final model to: {final_model_dir}")
+    model.save_pretrained(final_model_dir)
+
+    torch.save({
+        "model_state": model.state_dict(),
+        "optimizer_state": optimizer.state_dict(),
+        "scheduler_state": scheduler.state_dict() if scheduler else None,
+    }, os.path.join(final_model_dir, "final_checkpoint.pt"))
 
 def write_done_marker(save_dir):
     """Write a flag file to signal training completed."""

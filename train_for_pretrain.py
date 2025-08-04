@@ -176,7 +176,7 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
                     if patience >= max_patience:
                         print(f"Early stopping (no improvement in {max_patience} validation checks)")
                         csv_file.close()
-                        save_final_model_if_needed(model, save_dir)
+                        save_final_model_if_needed(model, save_dir, optimizer, scheduler)
                         write_done_marker(save_dir)
                         return  # Early stop exit
 
@@ -324,12 +324,11 @@ def train_for_pretrain_steps(model, train_loader, val_loader, cfg, save_dir, csv
         total_train_loss += loss.item()
         global_step += 1
         step_in_epoch += 1
-        
+
         # Potential way to prevent a memory leak
         del batch, outputs, loss
         torch.cuda.empty_cache()
         # End block
-
 
         # === Validation, Logging, Checkpointing ===
         if global_step % validate_every_steps == 0:
@@ -356,7 +355,7 @@ def train_for_pretrain_steps(model, train_loader, val_loader, cfg, save_dir, csv
                     if patience >= max_patience:
                         print(f"⛔ Early stopping triggered after {max_patience} validations with no improvement.")
                         csv_file.close()
-                        save_final_model_if_needed(model, save_dir)
+                        save_final_model_if_needed(model, save_dir, optimizer, scheduler)
                         write_done_marker(save_dir)
                         return
 
