@@ -291,100 +291,102 @@ def train_for_pretrain_steps(model, train_loader, val_loader, cfg, save_dir, csv
     step_in_epoch = 0
 
     # === Main Training Loop ===
-    while global_step < max_training_steps:
-        # === Training ===
-        model.train()
+    with tqdm(total=max_training_steps, initial=global_step, desc="Training", dynamic_ncols=True) as pbar:
+        while global_step < max_training_steps:
+            # === Training ===
+            model.train()
 
-        # === One batch ===
-        batch = next(train_iterator)
-        batch = {k: v.to(device) for k, v in batch.items()}
+            # === One batch ===
+            batch = next(train_iterator)
+            batch = {k: v.to(device) for k, v in batch.items()}
 
-        # # === Forward / Backward pass ===
-        if use_amp:
-            with autocast("cuda"):
+            # # === Forward / Backward pass ===
+            if use_amp:
+                with autocast("cuda"):
+                    outputs = model(**batch)
+                    loss = outputs.loss
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                clip_grad_norm_(model.parameters(), max_norm=1.0)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
                 outputs = model(**batch)
                 loss = outputs.loss
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
-            clip_grad_norm_(model.parameters(), max_norm=1.0)
-            scaler.step(optimizer)
-            scaler.update()
-        else:
-            outputs = model(**batch)
-            loss = outputs.loss
-            loss.backward()
-            clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
+                loss.backward()
+                clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
 
-        optimizer.zero_grad()
+            optimizer.zero_grad()
 
-        if scheduler and not isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-            scheduler.step()
+            if scheduler and not isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                scheduler.step()
 
-        total_train_loss += loss.item()
-        global_step += 1
-        step_in_epoch += 1
+            total_train_loss += loss.item()
+            global_step += 1
+            step_in_epoch += 1
 
-        # Potential way to prevent a memory leak
-        del batch, outputs, loss
-        torch.cuda.empty_cache()
-        # End block
+            # Potential way to prevent a memory leak
+            del batch, outputs, loss
+            torch.cuda.empty_cache()
+            # End block
 
-        # === Validation, Logging, Checkpointing ===
-        if global_step % validate_every_steps == 0:
-            avg_train_loss = total_train_loss / step_in_epoch
-            avg_val_loss = run_validation_batched(model, global_step, val_loader, device, max_batches=max_valid_batches)
+            # === Validation, Logging, Checkpointing ===
+            if global_step % validate_every_steps == 0:
+                avg_train_loss = total_train_loss / step_in_epoch
+                avg_val_loss = run_validation_batched(model, global_step, val_loader, device, max_batches=max_valid_batches)
 
-            # Save best model
-            if avg_val_loss < best_val_loss - early_stopping_threshold:
-                best_val_loss = avg_val_loss
-                patience = 0
-                model.save_pretrained(save_dir)
-                torch.save({
-                    "step": global_step,
-                    "model_state": model.state_dict(),
-                    "optimizer_state": optimizer.state_dict(),
-                    "scheduler_state": scheduler.state_dict() if scheduler else None,
-                    "best_val_loss": best_val_loss,
-                    "patience": patience,
-                }, checkpoint_path)
-                print(f"✅ Checkpoint saved at step {global_step}")
-            else:
-                patience += 1
-                if cfg.get("early_stopping_toggle", True):
-                    if patience >= max_patience:
-                        print(f"⛔ Early stopping triggered after {max_patience} validations with no improvement.")
-                        csv_file.close()
-                        save_final_model_if_needed(model, save_dir, optimizer, scheduler)
-                        write_done_marker(save_dir)
-                        return
+                # Save best model
+                if avg_val_loss < best_val_loss - early_stopping_threshold:
+                    best_val_loss = avg_val_loss
+                    patience = 0
+                    model.save_pretrained(save_dir)
+                    torch.save({
+                        "step": global_step,
+                        "model_state": model.state_dict(),
+                        "optimizer_state": optimizer.state_dict(),
+                        "scheduler_state": scheduler.state_dict() if scheduler else None,
+                        "best_val_loss": best_val_loss,
+                        "patience": patience,
+                    }, checkpoint_path)
+                    print(f"✅ Checkpoint saved at step {global_step}")
+                else:
+                    patience += 1
+                    if cfg.get("early_stopping_toggle", True):
+                        if patience >= max_patience:
+                            print(f"⛔ Early stopping triggered after {max_patience} validations with no improvement.")
+                            csv_file.close()
+                            save_final_model_if_needed(model, save_dir, optimizer, scheduler)
+                            write_done_marker(save_dir)
+                            return
 
-            # Steps for mini-backup...
-            # ✅ Mini-backup every N validation steps
-            if global_step % (validate_every_steps * BACKUP_EVERY_BATCH // validate_every_steps) == 0:
-                backup_path = os.path.join(save_dir, f"backup_step_{global_step}.pt")
-                torch.save({
-                    "step": global_step,
-                    "model_state": model.state_dict(),
-                    "optimizer_state": optimizer.state_dict(),
-                    "scheduler_state": scheduler.state_dict() if scheduler else None,
-                    "best_val_loss": best_val_loss,
-                    "patience": patience,
-                }, backup_path)
-                print(f"💾 Backup checkpoint saved at step {global_step} → {backup_path}")
+                # Steps for mini-backup...
+                # ✅ Mini-backup every N validation steps
+                if global_step % (validate_every_steps * BACKUP_EVERY_BATCH // validate_every_steps) == 0:
+                    backup_path = os.path.join(save_dir, f"backup_step_{global_step}.pt")
+                    torch.save({
+                        "step": global_step,
+                        "model_state": model.state_dict(),
+                        "optimizer_state": optimizer.state_dict(),
+                        "scheduler_state": scheduler.state_dict() if scheduler else None,
+                        "best_val_loss": best_val_loss,
+                        "patience": patience,
+                    }, backup_path)
+                    print(f"💾 Backup checkpoint saved at step {global_step} → {backup_path}")
 
-            # Logging
-            current_lr = optimizer.param_groups[0]['lr']
-            pseudo_epoch = global_step * train_loader.batch_size // len(train_loader.dataset)
-            print(f"[Epoch {pseudo_epoch} | Step {global_step}] train_loss={avg_train_loss:.4f}  "
-                  f"val_loss={avg_val_loss:.4f}  lr={current_lr:.2E}")
-            csv_writer.writerow(
-                [pseudo_epoch, global_step, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
-            csv_file.flush()
+                # Logging
+                current_lr = optimizer.param_groups[0]['lr']
+                pseudo_epoch = global_step * train_loader.batch_size // len(train_loader.dataset)
+                print(f"[Epoch {pseudo_epoch} | Step {global_step}] train_loss={avg_train_loss:.4f}  "
+                      f"val_loss={avg_val_loss:.4f}  lr={current_lr:.2E}")
+                csv_writer.writerow(
+                    [pseudo_epoch, global_step, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
+                csv_file.flush()
 
-            # Reset counters after validation
-            total_train_loss = 0.0
-            step_in_epoch = 0
+                # Reset counters after validation
+                total_train_loss = 0.0
+                step_in_epoch = 0
+                pbar.update(1)  # update tqdm bar
 
     # === Training Complete ===
     csv_file.close()
