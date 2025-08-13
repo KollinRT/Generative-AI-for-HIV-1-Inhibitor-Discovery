@@ -16,6 +16,9 @@ import gc
 
 from pybloom_live import ScalableBloomFilter
 
+import dask.dataframe as dd
+
+from utils import MaskTokensLogitsProcessor
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -110,17 +113,35 @@ def load_smiles_from_csv(csv_path, selfies_column="selfies"):
 
 ### --- 3️⃣ Define Model Wrapper for Generation --- ###
 class HuggingFaceMoleculeGenerator:
-    def __init__(self, model_path, tokenizer_path, device="cuda"):
-        """Load Hugging Face BART model & tokenizer for molecule generation."""
+    # def __init__(self, model_path, tokenizer_path, device="cuda"):
+    #     """Load Hugging Face BART model & tokenizer for molecule generation."""
+    #     self.device = torch.device(device)
+    #     self.tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
+    #
+    #     # ✅ Load model and weights
+    #     self.model = BartForConditionalGeneration.from_pretrained(model_path)
+    #     self.model.to(self.device)
+    #     self.model.eval()
+    #
+    #     print(f"✅ Fine-tuned model loaded from {model_path}")
+    def __init__(self, model_path, tokenizer_path, device="cuda", forbidden_tokens=None, forbidden_token_ids=None):
         self.device = torch.device(device)
         self.tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
+        self.model = BartForConditionalGeneration.from_pretrained(model_path).to(self.device).eval()
 
-        # ✅ Load model and weights
-        self.model = BartForConditionalGeneration.from_pretrained(model_path)
-        self.model.to(self.device)
-        self.model.eval()
+        # Configure forbidden ids (either strings or ids)
+        ids_from_strings = []
+        if forbidden_tokens:
+            # Each string can be one token or multiple; we only suppress single-token strings here.
+            # For multi-token phrases, see option B below.
+            ids_from_strings = self.tokenizer.convert_tokens_to_ids(forbidden_tokens)
+            ids_from_strings = [i for i in ids_from_strings if i is not None and i != self.tokenizer.unk_token_id]
+
+        self.forbidden_token_ids = set((forbidden_token_ids or []) + ids_from_strings)
 
         print(f"✅ Fine-tuned model loaded from {model_path}")
+        if self.forbidden_token_ids:
+            print(f"🚫 Will suppress {len(self.forbidden_token_ids)} token ids during generation.")
 
     def selfies_to_smiles(self, selfies_list):
         """Convert SELFIES to valid SMILES."""
@@ -416,19 +437,90 @@ class HuggingFaceMoleculeGenerator:
     #
     #     # return all_smiles
 
+    # def sample(self, n, batch_size=100, prefix="", output_csv="output2.csv"):
+    #     """
+    #     Generate `n` molecules in batches and return SMILES strings.
+    #
+    #     Args:
+    #         n (int): Total number of molecules to generate.
+    #         batch_size (int): Number of molecules per batch.
+    #         prefix (str): Starting SELFIES tokens (space-separated).
+    #         output_csv (str or None): Path to write outputs (optional).
+    #
+    #     Returns:
+    #         List[str]: List of generated SMILES strings.
+    #     """
+    #     if not prefix.strip():
+    #         print("⚠️ Empty prefix provided. Using default '<s>'.")
+    #         prefix = "<s>"
+    #
+    #     tokens = prefix.strip().split()
+    #     input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
+    #     input_tensor = torch.tensor([input_ids], device=self.device)
+    #
+    #     total_generated = 0
+    #     all_selfies = []
+    #
+    #     while total_generated < n:
+    #         current_batch_size = min(batch_size, n - total_generated)
+    #
+    #         with torch.no_grad():
+    #             output_ids = self.model.generate(
+    #                 input_ids=input_tensor.expand(current_batch_size, -1),
+    #                 max_length=63,
+    #                 num_return_sequences=current_batch_size,
+    #                 do_sample=True,
+    #                 temperature=1.5,
+    #                 top_k=30,
+    #                 top_p=0.9,
+    #                 repetition_penalty=1.1,
+    #             )
+    #
+    #         selfies_list = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+    #
+    #         # ✅ Apply token cleanup if needed
+    #         # mapped_selfies_list = [apply_selfies_token_mapping(s) for s in selfies_list]
+    #
+    #         # ✅ Convert SELFIES to valid SMILES
+    #         # smiles_list = self.selfies_to_smiles(mapped_selfies_list)
+    #         # all_smiles.extend(smiles_list)
+    #
+    #
+    #         # all_selfies_list = []
+    #         # for molecules in all_selfies:
+    #         #     all_selfies.append(molecules.replace(" ", ""))
+    #
+    #         all_selfies_list = []
+    #         for molecules in selfies_list:
+    #             all_selfies_list.append(molecules.replace(" ", ""))
+    #
+    #         # all_selfies.extend(selfies_list)
+    #         all_selfies.extend(all_selfies_list)
+    #
+    #         # TODO: 08/01/25 16:45 pm: ALSO CONSIDER DOING MAPPED SELFIES HERE!
+    #
+    #         # # ✅ Save to file if requested
+    #         # if output_csv:
+    #         #     with open(output_csv, "a") as f:
+    #         #         for s in selfies_list:
+    #         #             f.write(f"{s},True,Novel\n")
+    #
+    #         # ✅ Save to file if requested
+    #         if output_csv:
+    #             with open(output_csv, "a") as f:
+    #                 for s in all_selfies:
+    #                     f.write(f"{s},True,Novel\n")
+    #
+    #         total_generated += current_batch_size
+    #         torch.cuda.empty_cache()
+    #         gc.collect()
+    #
+    #     return all_selfies
+    #
+    #     # return all_smiles
+    #
+
     def sample(self, n, batch_size=100, prefix="", output_csv="output2.csv"):
-        """
-        Generate `n` molecules in batches and return SMILES strings.
-
-        Args:
-            n (int): Total number of molecules to generate.
-            batch_size (int): Number of molecules per batch.
-            prefix (str): Starting SELFIES tokens (space-separated).
-            output_csv (str or None): Path to write outputs (optional).
-
-        Returns:
-            List[str]: List of generated SMILES strings.
-        """
         if not prefix.strip():
             print("⚠️ Empty prefix provided. Using default '<s>'.")
             prefix = "<s>"
@@ -437,12 +529,19 @@ class HuggingFaceMoleculeGenerator:
         input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
         input_tensor = torch.tensor([input_ids], device=self.device)
 
+        # Build logits processors
+        processors = LogitsProcessorList()
+        # (optional) don’t stop too early
+        processors.append(MinLengthLogitsProcessor(min_length=4, eos_token_id=self.tokenizer.eos_token_id))
+        # hard-mask forbidden tokens
+        if self.forbidden_token_ids:
+            processors.append(MaskTokensLogitsProcessor(self.forbidden_token_ids))
+
         total_generated = 0
         all_selfies = []
 
         while total_generated < n:
             current_batch_size = min(batch_size, n - total_generated)
-
             with torch.no_grad():
                 output_ids = self.model.generate(
                     input_ids=input_tensor.expand(current_batch_size, -1),
@@ -453,51 +552,23 @@ class HuggingFaceMoleculeGenerator:
                     top_k=30,
                     top_p=0.9,
                     repetition_penalty=1.1,
+                    logits_processor=processors,   # ← key line
+                    eos_token_id=self.tokenizer.eos_token_id,
+                    pad_token_id=self.tokenizer.pad_token_id
                 )
 
             selfies_list = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+            all_selfies.extend(s.replace(" ", "") for s in selfies_list)
 
-            # ✅ Apply token cleanup if needed
-            # mapped_selfies_list = [apply_selfies_token_mapping(s) for s in selfies_list]
-
-            # ✅ Convert SELFIES to valid SMILES
-            # smiles_list = self.selfies_to_smiles(mapped_selfies_list)
-            # all_smiles.extend(smiles_list)
-
-
-            # all_selfies_list = []
-            # for molecules in all_selfies:
-            #     all_selfies.append(molecules.replace(" ", ""))
-
-            all_selfies_list = []
-            for molecules in selfies_list:
-                all_selfies_list.append(molecules.replace(" ", ""))
-
-            # all_selfies.extend(selfies_list)
-            all_selfies.extend(all_selfies_list)
-
-            # TODO: 08/01/25 16:45 pm: ALSO CONSIDER DOING MAPPED SELFIES HERE!
-
-            # # ✅ Save to file if requested
-            # if output_csv:
-            #     with open(output_csv, "a") as f:
-            #         for s in selfies_list:
-            #             f.write(f"{s},True,Novel\n")
-
-            # ✅ Save to file if requested
             if output_csv:
                 with open(output_csv, "a") as f:
-                    for s in all_selfies:
+                    for s in selfies_list:
                         f.write(f"{s},True,Novel\n")
 
             total_generated += current_batch_size
-            torch.cuda.empty_cache()
-            gc.collect()
+            torch.cuda.empty_cache(); gc.collect()
 
         return all_selfies
-
-        # return all_smiles
-
 
 ### --- 4️⃣ Benchmarking: Compute Uniqueness & Novelty and Save to CSV --- ###
 def is_valid_smiles(smiles):
@@ -526,421 +597,6 @@ def check_novelty(smiles_list, train_set, pretrain_set):
     return [smiles for smiles in smiles_list if smiles not in train_set and smiles not in pretrain_set]
 
 
-def benchmark_generated_molecules_selfies(gen, selfies_df, num_samples=5000, batch_size=100,
-                                          output_csv="generated_molecules.csv"):
-    """
-    Parameters:
-    - gen: HuggingFaceMoleculeGenerator instance
-    - selfies_df: Pandas DataFrame with columns 'SELFIES' and 'SMILES'
-    - num_samples: Total number of molecules to generate
-    - batch_size: Number of molecules generated per batch
-    - output_csv: Path to save generated molecules
-
-    Returns:
-    - A dictionary with uniqueness and novelty scores
-    """
-
-    # ✅ Extract training SELFIES column as a set for fast lookup
-    # train_selfies_set = set(selfies_df["selfies"].dropna().astype(str))
-    train_selfies_set = set(selfies_df["selfies"].dropna().astype(str).unique())
-
-    # ✅ Generate SELFIES strings
-    generated_selfies = gen.sample(num_samples, batch_size=batch_size, prefix="[C]")
-
-    # ✅ Filter out empty or non-string entries
-    filtered_selfies = [s for s in generated_selfies if isinstance(s, str) and s.strip()]
-    print(f"✅ Valid (non-empty) SELFIES: {len(filtered_selfies)} / {len(generated_selfies)}")
-
-    # ✅ Uniqueness: how many are unique among generated
-    unique_selfies_set = set(filtered_selfies)
-    uniqueness = (len(unique_selfies_set) / len(filtered_selfies)) * 100 if filtered_selfies else 0
-
-    # ✅ Novelty: how many are not in training data
-    novel_selfies = list(unique_selfies_set - train_selfies_set)
-    novelty = (len(novel_selfies) / len(unique_selfies_set)) * 100 if unique_selfies_set else 0
-
-    # ✅ Save to CSV
-    df = pd.DataFrame({
-        "SELFIES": list(unique_selfies_set),
-        "Novel": [s in novel_selfies for s in unique_selfies_set],
-        "Unique": [True] * len(unique_selfies_set)
-    })
-    df.to_csv(output_csv, index=False)
-    print(f"📁 Generated molecules saved to: {output_csv}")
-
-    # ✅ Summary results
-    results = {
-        "Total Generated": len(generated_selfies),
-        "Valid Unique SELFIES": len(unique_selfies_set),
-        "% Uniqueness": round(uniqueness, 3),
-        "Novel Molecules": len(novel_selfies),
-        "% Novelty": round(novelty, 3),
-    }
-
-    print("\n📊 Benchmark Results:")
-    for key, value in results.items():
-        print(f"{key}: {value}")
-
-    return results
-
-def benchmark_generated_molecules_smiles(gen, selfies_df, num_samples=5000, batch_size=100,
-                                         output_csv="generated_molecules.csv", output_txt="generated_molecules.txt"):
-    """
-    Benchmarks molecules generated by a HuggingFaceMoleculeGenerator.
-
-    Parameters:
-    - gen: HuggingFaceMoleculeGenerator instance
-    - selfies_df: Pandas DataFrame with 'SMILES' and 'SELFIES' columns
-    - num_samples: Total number of molecules to generate
-    - batch_size: Number of molecules generated per batch
-    - output_csv: Path to save generated molecules
-
-    Returns:
-    - Dictionary with uniqueness and novelty metrics
-    """
-
-    # ✅ Reference: Canonicalized SMILES from training data
-    train_smiles_set = set(selfies_df["smiles"].dropna().astype(str).unique())
-
-    # ✅ Generate molecules (SMILES)
-    generated_smiles = gen.sample(num_samples, batch_size=batch_size, prefix="")
-
-    # ✅ Filter out invalid/empty SMILES
-    valid_smiles = [s for s in generated_smiles if isinstance(s, str) and s.strip()]
-    print(f"✅ Valid SMILES: {len(valid_smiles)} / {len(generated_smiles)}")
-
-    # ✅ Uniqueness: unique molecules within generated set
-    unique_smiles_set = set(valid_smiles)
-    uniqueness = (len(unique_smiles_set) / len(valid_smiles)) * 100 if valid_smiles else 0
-
-    # ✅ Novelty: molecules not in training data
-    novel_smiles = list(unique_smiles_set - train_smiles_set)
-    novelty = (len(novel_smiles) / len(unique_smiles_set)) * 100 if unique_smiles_set else 0
-
-    # ✅ Save results to CSV
-    df = pd.DataFrame({
-        "SELFIES": list(unique_smiles_set), # changed column header to SELFIES instead of SMILES.
-        "Novel": [s in novel_smiles for s in unique_smiles_set],
-        "Unique": [True] * len(unique_smiles_set)
-    })
-    df.to_csv(output_csv, index=False)
-    print(f"📁 Generated molecules saved to: {output_csv}")
-
-    # ✅ Summary output
-    results = {
-        "Total Generated": len(generated_smiles),
-        "Valid Unique SMILES": len(unique_smiles_set),
-        "% Uniqueness": round(uniqueness, 3),
-        "Novel Molecules": len(novel_smiles),
-        "% Novelty": round(novelty, 3),
-    }
-
-    print("\n📊 Benchmark Results:")
-    with open(output_txt, "w") as f:
-        f.write("📊 Benchmark Results:\n")
-        for key, val in results.items():
-            line = f"{key}: {val}"
-            print(line)
-            f.write(line + "\n")
-
-    print(f"\n📝 Benchmark summary saved to: {output_txt}")
-
-    return results
-
-import pandas as pd
-import os
-
-# def benchmark_generated_molecules_selfies_parquet(gen, selfies_pt, num_samples=5000, batch_size=100,
-#                                                   output_csv="generated_molecules.csv",
-#                                                   output_txt="generated_molecules.txt"):
-#     """
-#     Benchmarks molecules generated by a HuggingFaceMoleculeGenerator.
-#
-#     Parameters:
-#     - gen: HuggingFaceMoleculeGenerator instance
-#     - selfies_pt: Either a DataFrame or path to a Parquet file with column 'smiles'
-#     - num_samples: Total number of molecules to generate
-#     - batch_size: Number of molecules generated per batch
-#     - output_csv: Path to save generated molecules
-#     - output_txt: Path to save benchmark summary
-#
-#     Returns:
-#     - Dictionary with uniqueness and novelty metrics
-#     """
-#
-#     # ✅ Load Parquet file if path is given
-#     if isinstance(selfies_pt, str):
-#         if not os.path.exists(selfies_pt):
-#             raise FileNotFoundError(f"Parquet file not found: {selfies_pt}")
-#         print(f"📂 Loading training data from: {selfies_pt}")
-#         selfies_df = dd.read_parquet(selfies_pt)
-#     elif isinstance(selfies_pt, pd.DataFrame):
-#         selfies_df = selfies_pt
-#     else:
-#         raise ValueError("`selfies_pt` must be a path to a Parquet file or a pandas DataFrame.")
-#
-#     # ✅ Reference set of SMILES from training data
-#     # if "smiles" not in selfies_df.columns:
-#     #     raise ValueError("Training dataset must contain a 'smiles' column.")
-#     # train_smiles_set = set(selfies_df["smiles"].dropna().astype(str).unique())
-#
-#     # train_selfies_set = set(selfies_df["selfies"].dropna().astype(str).unique())
-#     # train_selfies_set = set(
-#     #     selfies_df["selfies"]
-#     #     .dropna()
-#     #     .astype(str)
-#     #     .unique()
-#     #     .compute()
-#     # )
-#
-#     # # Extract unique values in each partition, then deduplicate
-#     # train_selfies_set = set(
-#     #     selfies_df["selfies"]
-#     #     .dropna()
-#     #     .astype(str)
-#     #     .map_partitions(lambda df: df.unique())
-#     #     .compute()
-#     #     .unique()
-#     # )
-#
-#     # train_selfies_series = selfies_df["selfies"].dropna().astype(str).drop_duplicates().compute()
-#     # train_selfies_set = set(train_selfies_series)
-#
-#     train_selfies_set = set(
-#         selfies_df["selfies"]
-#         .dropna()
-#         .astype(str)
-#         .map_partitions(lambda df: df.drop_duplicates())
-#         .compute()
-#         .drop_duplicates()
-#     )
-#
-#     # ✅ Generate molecules (SMILES)
-#     generated_smiles = gen.sample(num_samples, batch_size=batch_size, prefix="")
-#
-#     # ✅ Filter out invalid/empty SMILES
-#     valid_smiles = [s for s in generated_smiles if isinstance(s, str) and s.strip()]
-#     print(f"✅ Valid SMILES: {len(valid_smiles)} / {len(generated_smiles)}")
-#
-#     # ✅ Uniqueness: unique molecules within generated set
-#     unique_smiles_set = set(valid_smiles)
-#     uniqueness = (len(unique_smiles_set) / len(valid_smiles)) * 100 if valid_smiles else 0
-#
-#     # ✅ Novelty: molecules not in training data
-#     novel_smiles = list(unique_smiles_set - train_selfies_set)
-#     novelty = (len(novel_smiles) / len(unique_smiles_set)) * 100 if unique_smiles_set else 0
-#
-#     # ✅ Save results to CSV
-#     df = pd.DataFrame({
-#         "SELFIES": list(unique_smiles_set),  # Column name kept as "SELFIES" per your design
-#         "Novel": [s in novel_smiles for s in unique_smiles_set],
-#         "Unique": [True] * len(unique_smiles_set)
-#     })
-#     df.to_csv(output_csv, index=False)
-#     print(f"📁 Generated molecules saved to: {output_csv}")
-#
-#     # ✅ Summary output
-#     results = {
-#         "Total Generated": len(generated_smiles),
-#         "Valid Unique SMILES": len(unique_smiles_set),
-#         "% Uniqueness": round(uniqueness, 3),
-#         "Novel Molecules": len(novel_smiles),
-#         "% Novelty": round(novelty, 3),
-#     }
-#
-#     print("\n📊 Benchmark Results:")
-#     with open(output_txt, "w") as f:
-#         f.write("📊 Benchmark Results:\n")
-#         for key, val in results.items():
-#             line = f"{key}: {val}"
-#             print(line)
-#             f.write(line + "\n")
-#
-#     print(f"\n📝 Benchmark summary saved to: {output_txt}")
-#
-#     return results
-#
-
-# def benchmark_generated_selfies_parquet(gen, selfies_pt, num_samples=5000, batch_size=100,
-#                                        output_csv="generated_molecules.csv",
-#                                        output_txt="generated_molecules.txt"):
-#     """
-#     Benchmarks SELFIES generated by a HuggingFaceMoleculeGenerator.
-#
-#     Parameters:
-#     - gen: HuggingFaceMoleculeGenerator instance
-#     - selfies_pt: Either a DataFrame or path to a Parquet file with column 'selfies'
-#     - num_samples: Total number of SELFIES to generate
-#     - batch_size: Number of SELFIES generated per batch
-#     - output_csv: Path to save generated molecules
-#     - output_txt: Path to save benchmark summary
-#
-#     Returns:
-#     - Dictionary with uniqueness and novelty metrics
-#     """
-#
-#     import os
-#     import pandas as pd
-#     import dask.dataframe as dd
-#
-#     # Load training SELFIES data
-#     if isinstance(selfies_pt, str):
-#         if not os.path.exists(selfies_pt):
-#             raise FileNotFoundError(f"Parquet file not found: {selfies_pt}")
-#         print(f"📂 Loading training data from: {selfies_pt}")
-#         selfies_df = dd.read_parquet(selfies_pt)
-#     elif isinstance(selfies_pt, pd.DataFrame):
-#         selfies_df = selfies_pt
-#     else:
-#         raise ValueError("`selfies_pt` must be a path to a Parquet file or a pandas DataFrame.")
-#
-#     # Get unique SELFIES from training data
-#     train_selfies_set = set(
-#         selfies_df["selfies"]
-#         .dropna()
-#         .astype(str)
-#         .map_partitions(lambda df: df.drop_duplicates())
-#         .compute()
-#         .drop_duplicates()
-#     )
-#
-#     # Generate SELFIES molecules
-#     generated_selfies = gen.sample(num_samples, batch_size=batch_size, prefix="")
-#
-#     # Filter out empty or None entries
-#     filtered_selfies = [s for s in generated_selfies if isinstance(s, str) and s.strip()]
-#     print(f"✅ Non-empty SELFIES: {len(filtered_selfies)} / {len(generated_selfies)}")
-#
-#     # Uniqueness in generated SELFIES
-#     unique_selfies_set = set(filtered_selfies)
-#     uniqueness = (len(unique_selfies_set) / len(filtered_selfies)) * 100 if filtered_selfies else 0
-#
-#     # Novelty compared to training SELFIES
-#     novel_selfies = list(unique_selfies_set - train_selfies_set)
-#     novelty = (len(novel_selfies) / len(unique_selfies_set)) * 100 if unique_selfies_set else 0
-#
-#     # Save results to CSV
-#     df = pd.DataFrame({
-#         "SELFIES": list(unique_selfies_set),
-#         "Novel": [s in novel_selfies for s in unique_selfies_set],
-#         "Unique": [True] * len(unique_selfies_set)
-#     })
-#     df.to_csv(output_csv, index=False)
-#     print(f"📁 Generated SELFIES saved to: {output_csv}")
-#
-#     # Summary output
-#     results = {
-#         "Total Generated": len(generated_selfies),
-#         "Non-empty SELFIES": len(filtered_selfies),
-#         "Unique SELFIES": len(unique_selfies_set),
-#         "% Uniqueness": round(uniqueness, 3),
-#         "Novel SELFIES": len(novel_selfies),
-#         "% Novelty": round(novelty, 3),
-#     }
-#
-#     print("\n📊 Benchmark Results:")
-#     with open(output_txt, "w") as f:
-#         f.write("📊 Benchmark Results:\n")
-#         for key, val in results.items():
-#             line = f"{key}: {val}"
-#             print(line)
-#             f.write(line + "\n")
-#
-#     print(f"\n📝 Benchmark summary saved to: {output_txt}")
-#
-#     return results
-
-import os
-import pandas as pd
-import dask.dataframe as dd
-
-# def benchmark_generated_molecules_selfies_parquet(
-#     gen, selfies_pt, num_samples=5000, batch_size=100,
-#     output_csv="generated_molecules.csv",
-#     output_txt="generated_molecules.txt"
-# ):
-#     """
-#     Benchmarks molecules generated by a HuggingFaceMoleculeGenerator.
-#
-#     Parameters:
-#     - gen: HuggingFaceMoleculeGenerator instance
-#     - selfies_pt: Either a DataFrame or path to a Parquet file with column 'selfies'
-#     - num_samples: Total number of molecules to generate
-#     - batch_size: Number of molecules generated per batch
-#     - output_csv: Path to save generated molecules
-#     - output_txt: Path to save benchmark summary
-#
-#     Returns:
-#     - Dictionary with uniqueness and novelty metrics
-#     """
-#
-#     # Load Parquet file if path is given
-#     if isinstance(selfies_pt, str):
-#         if not os.path.exists(selfies_pt):
-#             raise FileNotFoundError(f"Parquet file not found: {selfies_pt}")
-#         print(f"📂 Loading training data from: {selfies_pt}")
-#         selfies_df = dd.read_parquet(selfies_pt)
-#     elif isinstance(selfies_pt, pd.DataFrame):
-#         selfies_df = selfies_pt
-#     else:
-#         raise ValueError("`selfies_pt` must be a path to a Parquet file or a pandas DataFrame.")
-#
-#     # Build training set of SELFIES memory-efficiently, partition by partition
-#     train_selfies_set = set()
-#     print("🔄 Computing unique SELFIES from training data partition-wise...")
-#     for delayed_partition in selfies_df["selfies"].dropna().astype(str).to_delayed():
-#         partition_df = delayed_partition.compute()
-#         unique_selfies = set(partition_df.drop_duplicates())
-#         train_selfies_set.update(unique_selfies)
-#     print(f"✅ Training SELFIES count: {len(train_selfies_set)}")
-#
-#     # Generate molecules (SELFIES)
-#     generated_selfies = gen.sample(num_samples, batch_size=batch_size, prefix="")
-#
-#     # Filter out empty or invalid generated SELFIES (if needed)
-#     # Assuming generated_selfies are all strings and valid, so no filtering here
-#
-#     # Uniqueness: unique molecules within generated set
-#     unique_selfies_set = set(generated_selfies)
-#     uniqueness = (len(unique_selfies_set) / len(generated_selfies)) * 100 if generated_selfies else 0
-#
-#     # Novelty: molecules not in training data
-#     novel_selfies = list(unique_selfies_set - train_selfies_set)
-#     novelty = (len(novel_selfies) / len(unique_selfies_set)) * 100 if unique_selfies_set else 0
-#
-#     # Save results to CSV
-#     df = pd.DataFrame({
-#         "SELFIES": list(unique_selfies_set),
-#         "Novel": [s in novel_selfies for s in unique_selfies_set],
-#         "Unique": [True] * len(unique_selfies_set)
-#     })
-#     df.to_csv(output_csv, index=False)
-#     print(f"📁 Generated molecules saved to: {output_csv}")
-#
-#     # Summary output
-#     results = {
-#         "Total Generated": len(generated_selfies),
-#         "Valid Unique SELFIES": len(unique_selfies_set),
-#         "% Uniqueness": round(uniqueness, 3),
-#         "Novel Molecules": len(novel_selfies),
-#         "% Novelty": round(novelty, 3),
-#     }
-#
-#     print("\n📊 Benchmark Results:")
-#     with open(output_txt, "w") as f:
-#         f.write("📊 Benchmark Results:\n")
-#         for key, val in results.items():
-#             line = f"{key}: {val}"
-#             print(line)
-#             f.write(line + "\n")
-#
-#     print(f"\n📝 Benchmark summary saved to: {output_txt}")
-#
-#     return results
-
-import os
-import pandas as pd
-import dask.dataframe as dd
 
 def benchmark_generated_molecules_selfies_parquet(
     gen, selfies_pt, num_samples=5000, batch_size=100,
@@ -1227,12 +883,31 @@ if __name__ == "__main__":
     # )
 
     # Fine tuned best model 3x (increased 2x then 3x and yeah it was best)
+    # gen = HuggingFaceMoleculeGenerator(
+    #     model_path="./runs/selfies_BART_finetune_model_small_adamw_earlyS_6_long_3x/model",
+    #     tokenizer_path="full_tokenizer_finetune_and_pretrain",
+    #     device="cuda" if torch.cuda.is_available() else "cpu"
+    # )
+
+    # forbidden = [
+    #     "[Branch1_1]", "[Branch1_2]",
+    #     # ring closures, charged atoms, or any artifacts you don’t want in benchmarks:
+    #     "[Ring1]", "[Ring2]", "[+]", "[-]", "[O-]", "[N+]",
+    #     # punctuation/sentinels that should never appear:
+    #     ".", "<unk>"
+    # ]
+
+    forbidden = [
+        # Some ions not present in finetuning dataset
+        "[Ag-4]", "[Rb+1]", "[Sn+3]"
+    ]
+
     gen = HuggingFaceMoleculeGenerator(
         model_path="./runs/selfies_BART_finetune_model_small_adamw_earlyS_6_long_3x/model",
         tokenizer_path="full_tokenizer_finetune_and_pretrain",
-        device="cuda" if torch.cuda.is_available() else "cpu"
+        device="cuda" if torch.cuda.is_available() else "cpu",
+        forbidden_tokens=forbidden
     )
-
 
     start_time = time.time()
 
