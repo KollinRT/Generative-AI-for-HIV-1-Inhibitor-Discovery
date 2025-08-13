@@ -5,6 +5,7 @@ import pymysql
 import pymysql.cursors
 from rdkit import Chem
 from rdkit.Chem import Draw, Descriptors
+
 # from rdkit.Chem import Descriptors
 import matplotlib.pyplot as plt
 import csv
@@ -12,25 +13,29 @@ import yaml
 import pandas as pd
 from pandarallel import pandarallel
 
-from prepare_dataset import prepare_dataset_for_pretrain, get_selfies_alphabet
-import selfies as sf # TODO: Figure out the error handling for this... It is somewhere in my code...
-from prepare_dataset import bpe_tokenizer, get_selfies_only, convert_to_selfies
+from prepare_dataset import convert_to_selfies
 
-import sqlite3
 
 # TODO: NEW Make some arg parser stuffs...
 import argparse
+
 # make a parser for parallel processing
 parser = argparse.ArgumentParser()
-parser.add_argument('--parallel', action='store_true', default=True, help='Use parallel processing')
+parser.add_argument(
+    "--parallel", action="store_true", default=True, help="Use parallel processing"
+)
 # now for yaml file
-parser.add_argument('--yaml', type=str, help='YAML file path for config stuffs', metavar="/path/to/hyperparameters/*.yml")
+parser.add_argument(
+    "--yaml",
+    type=str,
+    help="YAML file path for config stuffs",
+    metavar="/path/to/hyperparameters/*.yml",
+)
 # Now do this for pretrain/finetune
-parser.add_argument('--mode', type=str, help='Decide between pretrain or finetune')
+parser.add_argument("--mode", type=str, help="Decide between pretrain or finetune")
 
 # End of arg parser stuffs...
 args = parser.parse_args()
-
 
 
 # Configure a yaml file for config stuffs...
@@ -40,22 +45,26 @@ yaml_file = args.yaml
 # yaml_file = './FinetuneSpecs.yml'
 # Load the YAML file
 
-with open(yaml_file, 'r') as file:
-    data  = yaml.safe_load(file)
+with open(yaml_file, "r") as file:
+    data = yaml.safe_load(file)
 
-pymysql_info=data['pymysql_info']
+pymysql_info = data["pymysql_info"]
+
 
 # Function to establish connection to the database
 def create_db_connection():
-    connection = pymysql.connect(host=pymysql_info['host'],
-                                 user=pymysql_info['user'],
-                                 password=pymysql_info['password'],
-                                 database=pymysql_info['database'],
-                                 cursorclass=pymysql.cursors.DictCursor)
+    connection = pymysql.connect(
+        host=pymysql_info["host"],
+        user=pymysql_info["user"],
+        password=pymysql_info["password"],
+        database=pymysql_info["database"],
+        cursorclass=pymysql.cursors.DictCursor,
+    )
     return connection
 
+
 def query_chembl(excluded_tids):
-    query = f"""
+    query = """
     SELECT a.assay_id, a.doc_id, a.description,
         t.assay_desc AS assay_type,
         a.assay_organism, a.tid, a.confidence_score, a.curated_by, a.src_assay_id,
@@ -86,40 +95,43 @@ def query_chembl(excluded_tids):
     finally:
         connection.close()
 
+
 def compute_properties(row):
     from rdkit import Chem
-    from rdkit.Chem import Descriptors
 
-    smiles = row['canonical_smiles']
+    smiles = row["canonical_smiles"]
     mol = Chem.MolFromSmiles(smiles)
     if mol:
         MW = Descriptors.MolWt(mol)
-        numC = sum(1 for atom in mol.GetAtoms() if atom.GetSymbol() == 'C')
+        numC = sum(1 for atom in mol.GetAtoms() if atom.GetSymbol() == "C")
         chain_lengths = [len(fragment) for fragment in Chem.rdmolops.GetMolFrags(mol)]
         chain_length = max(chain_lengths) if chain_lengths else 0
         cLogP = Descriptors.MolLogP(mol)
         numRings = mol.GetRingInfo().NumRings()
         return {
-            'canonical_smiles': smiles,
-            'MW': MW,
-            'numC': numC,
-            'chain_length': chain_length,
-            'cLogP': cLogP,
-            'numRings': numRings,
-            'IC50': row['IC50'],
-            'site_name': row['site_name'] # TODO: this is not needed for the pretrain data...
+            "canonical_smiles": smiles,
+            "MW": MW,
+            "numC": numC,
+            "chain_length": chain_length,
+            "cLogP": cLogP,
+            "numRings": numRings,
+            "IC50": row["IC50"],
+            "site_name": row[
+                "site_name"
+            ],  # TODO: this is not needed for the pretrain data...
         }
     else:
         return {
-            'canonical_smiles': smiles,
-            'MW': None,
-            'numC': None,
-            'chain_length': None,
-            'cLogP': None,
-            'numRings': None,
-            'IC50': row['IC50'],
-            'site_name': row['site_name']
+            "canonical_smiles": smiles,
+            "MW": None,
+            "numC": None,
+            "chain_length": None,
+            "cLogP": None,
+            "numRings": None,
+            "IC50": row["IC50"],
+            "site_name": row["site_name"],
         }
+
 
 def execute_sql_query(query):
     connection = create_db_connection()
@@ -128,14 +140,18 @@ def execute_sql_query(query):
             cursor.execute(query)
             results = cursor.fetchall()  # Fetch all results
             # Extract only the 'canonical_smiles' column
-            smiles_list = [result['canonical_smiles'] for result in results if 'canonical_smiles' in result]
+            smiles_list = [
+                result["canonical_smiles"]
+                for result in results
+                if "canonical_smiles" in result
+            ]
             return smiles_list
     finally:
         connection.close()
- 
+
 
 def finetune_query_chembl(excluded_tids):
-    query = f"""
+    query = """
     SELECT DISTINCT cs.canonical_smiles
     FROM compound_structures cs
     JOIN activities a ON cs.molregno = a.molregno
@@ -143,7 +159,7 @@ def finetune_query_chembl(excluded_tids):
     WHERE ass.tid IN (191, 12456) # HIV-1 inhibs
     AND a.standard_type = 'IC50'; # for IC50 values
     """
-    return execute_sql_query(query) # 6877 for both
+    return execute_sql_query(query)  # 6877 for both
 
 
 # Function to draw SMILES
@@ -151,8 +167,9 @@ def draw_smiles(smiles_list):
     mols = [Chem.MolFromSmiles(smile) for smile in smiles_list]
     img = Draw.MolsToGridImage(mols, molsPerRow=4, subImgSize=(200, 200), useSVG=True)
     plt.imshow(img)
-    plt.axis('off')
+    plt.axis("off")
     plt.show()
+
 
 def save_smiles_to_csv(smiles_list, filename="smiles_finetune_data.csv"):
     # TODO: This would need the key implemented in the filename...
@@ -160,13 +177,18 @@ def save_smiles_to_csv(smiles_list, filename="smiles_finetune_data.csv"):
     if smiles_list:
         headers = smiles_list[0].keys()
     else:
-        headers = ["canonical_smiles", "IC50", "site_name"]  # Default headers if the list is empty
+        headers = [
+            "canonical_smiles",
+            "IC50",
+            "site_name",
+        ]  # Default headers if the list is empty
 
-    with open(filename, 'w', newline='') as csvfile:
+    with open(filename, "w", newline="") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=headers)
         writer.writeheader()  # Write the header for the columns
         for smile in smiles_list:
             writer.writerow(smile)  # Write each dictionary as a new row
+
 
 # Example usage
 excluded_tids = [191, 12456]
@@ -174,11 +196,15 @@ smiles = query_chembl(excluded_tids)
 save_smiles_to_csv(smiles)  # Save all SMILES to CSV for pretrain...
 print(f"Saved {len(smiles)} SMILES to smiles_finetune_data.csv")
 # Load CSV file
-df = pd.read_csv('./smiles_finetune_data.csv') # this is only containing `canonical_smiles`
+df = pd.read_csv(
+    "./smiles_finetune_data.csv"
+)  # this is only containing `canonical_smiles`
 
 # Ensure the 'canonical_smiles' column exists
-if 'canonical_smiles' not in df.columns:
-    raise ValueError("The input CSV file must contain a column named 'canonical_smiles'")
+if "canonical_smiles" not in df.columns:
+    raise ValueError(
+        "The input CSV file must contain a column named 'canonical_smiles'"
+    )
 
 
 pandarallel.initialize(progress_bar=True)
@@ -196,19 +222,24 @@ properties_df = pd.DataFrame(properties_series.tolist())
 print(properties_df)
 print(type(properties_df))
 
-properties_df.to_csv('./data/smiles_finetune_data_properties.csv', index=False)
- 
+properties_df.to_csv("./data/smiles_finetune_data_properties.csv", index=False)
+
 # Load the initial DataFrame
 non_filter = pd.read_csv("./data/smiles_finetune_data_properties.csv")
 
 import os
+
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 pandarallel.initialize()
-non_filter["selfies"] = non_filter["canonical_smiles"].parallel_apply(convert_to_selfies)
+non_filter["selfies"] = non_filter["canonical_smiles"].parallel_apply(
+    convert_to_selfies
+)
 non_filter.drop(non_filter[non_filter.selfies.isnull()].index, inplace=True)
 print(non_filter.columns)  # DEBUG
 print(f"smiles_data.columns post-drop: {non_filter.columns}")
-non_filter.to_csv(f"./data/smiles_finetune_data_properties_selfies.csv", index=False)  # TODO: index=False, header=False for sure...
+non_filter.to_csv(
+    "./data/smiles_finetune_data_properties_selfies.csv", index=False
+)  # TODO: index=False, header=False for sure...
 
 # print(f"saving properties df to: ./data/smiles_finetune_data_properties.csv")

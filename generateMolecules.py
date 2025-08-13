@@ -1,24 +1,30 @@
 """
 This script is for generating molecules from the pretrained and fine-tuned model for use for evaluating model performance.
 """
+
 from token_mapping import token_mapping
 
-def generate_text(model, tokenizer, input_text, max_length=100, num_return_sequences=5, num_beams=5):
+
+def generate_text(
+    model, tokenizer, input_text, max_length=100, num_return_sequences=5, num_beams=5
+):
     model.eval()  # Set the model to evaluation mode
 
     # ✅ Encode input text correctly
-    input_ids = tokenizer.encode(input_text, return_tensors='pt').to(model.device)
+    input_ids = tokenizer.encode(input_text, return_tensors="pt").to(model.device)
 
     # ✅ Generate text
     outputs = model.generate(
         input_ids=input_ids,
         max_length=max_length,
         num_return_sequences=num_return_sequences,
-        num_beams=num_beams
+        num_beams=num_beams,
     )
 
     # ✅ Decode generated text correctly
-    decoded_texts = [tokenizer.decode(output, skip_special_tokens=True) for output in outputs]
+    decoded_texts = [
+        tokenizer.decode(output, skip_special_tokens=True) for output in outputs
+    ]
 
     return decoded_texts
 
@@ -40,16 +46,19 @@ def benchmark_generated_molecules():
     """
     pass
 
-# TODO: NEW include sampling...
-from tokenizers import Tokenizer
-import os
 
-def load_model(model_path, device='cuda'):
+# TODO: NEW include sampling...
+
+
+def load_model(model_path, device="cuda"):
     """Load the pre-trained BART model."""
-    model = BartForConditionalGeneration.from_pretrained(model_path)  # Initialize the model architecture
+    model = BartForConditionalGeneration.from_pretrained(
+        model_path
+    )  # Initialize the model architecture
     # model.load_state_dict(torch.load(model_path, map_location=device))  # Load the state dictionary
     # model = model.to(device)
     return model
+
 
 def load_tokenizer(tokenizer_path):
     """Load the tokenizer used for both encoding and decoding."""
@@ -62,14 +71,14 @@ if __name__ == "__main__":
     from transformers import BartForConditionalGeneration, PreTrainedTokenizerFast
 
     # ✅ Set paths
-    #model_path = "/home/kollin/Desktop/CollectedRuns_All_And_New/CollectedRuns_All_And_New/CollectedRuns/CLUSTER_RESULTS/extra/selfies_BART_PRETRAIN_model_4/model"
-   # model_path = "/home/kollin/Desktop/ThesisBU/WIP_Thesis/runs/selfies_BART_finetune_model_4/model"
-    #model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/selfies_BART_PRETRAIN_model_4_warmup_namelater_DELETETHIS/model"
-    #model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/runs/selfies_BART_PRETRAIN_model_4_warmup_1_e-6_50/model"
+    # model_path = "/home/kollin/Desktop/CollectedRuns_All_And_New/CollectedRuns_All_And_New/CollectedRuns/CLUSTER_RESULTS/extra/selfies_BART_PRETRAIN_model_4/model"
+    # model_path = "/home/kollin/Desktop/ThesisBU/WIP_Thesis/runs/selfies_BART_finetune_model_4/model"
+    # model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/selfies_BART_PRETRAIN_model_4_warmup_namelater_DELETETHIS/model"
+    # model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/runs/selfies_BART_PRETRAIN_model_4_warmup_1_e-6_50/model"
     # model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/runs/selfies_BART_PRETRAIN_model_4_warmup_30_e-6/model"
     model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/runs/selfies_BART_PRETRAIN_model_4_warmup/model"
     model = load_model(model_path)
-    #tokenizer = load_tokenizer("selfies_word_tokenizer_12M")
+    # tokenizer = load_tokenizer("selfies_word_tokenizer_12M")
     tokenizer = load_tokenizer("full_tokenizer_finetune_and_pretrain")
     # ✅ Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -79,9 +88,9 @@ if __name__ == "__main__":
     # # input_text = "<s>"  # Example SELFIES input
     # # input_text.
     # # input_text = "[C] [C] [Branch1_1] [O][C][C][N][C][=O][C][C][Ring1][C][C][=O][O]"
-    #input_text = "[C] [C] [O]"
-    #input_text = "[C] [C] [Branch1_1] [O] [C] [C] [N] [C] [=O] [C] [C] [Ring1] [C] [C] [=O] [O]"
-    #input_text = "[C]"
+    # input_text = "[C] [C] [O]"
+    # input_text = "[C] [C] [Branch1_1] [O] [C] [C] [N] [C] [=O] [C] [C] [Ring1] [C] [C] [=O] [O]"
+    # input_text = "[C]"
     input_text = "<s>"
     #
     # # 1. Manual split
@@ -115,9 +124,8 @@ if __name__ == "__main__":
         top_k=50,  # ✅ Consider only top 50 most likely next tokens
         top_p=0.95,  # ✅ Use nucleus sampling (focus on probable tokens)
         repetition_penalty=1.0,  # ✅ Penalize repetitive phrases
-        num_beams=50  # ✅ Disable beam search (prevents deterministic output)
+        num_beams=50,  # ✅ Disable beam search (prevents deterministic output)
     )
-
 
     generated_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
     # generated_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
@@ -130,17 +138,18 @@ if __name__ == "__main__":
         # Debug again
         print("tokens:\n")
         print(tokens)
-        mapped_tokens = [token_mapping.get(tok, tok) for tok in tokens]  # Use mapping; fallback to original if not found
-        
+        mapped_tokens = [
+            token_mapping.get(tok, tok) for tok in tokens
+        ]  # Use mapping; fallback to original if not found
+
         # Debug
         print("mapped_tokens:\n")
         print(mapped_tokens)
-        selfies_string = ''.join(mapped_tokens)
+        selfies_string = "".join(mapped_tokens)
         cleaned_selfies.append(selfies_string)
 
     print("Generated Texts:", generated_texts)
     print("Cleaned SELFIES:", cleaned_selfies)
-
 
     print("Generated Texts:", generated_texts)
     print(cleaned_selfies)

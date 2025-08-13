@@ -227,5 +227,6 @@ python3 train_for_pretrain.py --hyperparameters_path="./combined_config.yml"
 
 python3 train_for_pretrain.py --hyperparameters_path="./combined_config_steps.yml"
 
+python3 train_for_finetune.py --hyperparameters_path="./combined_config_WIP_FT.yml"
 
 ```

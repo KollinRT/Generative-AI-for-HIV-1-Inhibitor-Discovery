@@ -2,16 +2,18 @@ from SelfiesDataHandler import SelfiesTokenizer
 from transformers import BartForConditionalGeneration, BartConfig
 import pandas as pd
 from tokenizers import Tokenizer
-from SelfiesDataHandler import SelfiesDataset
-from torch.utils.data import Dataset, DataLoader
-import torch
 from transformers import Trainer, TrainingArguments
 import math
-import yaml
 
 # Load the tokenizer to get the vocab size
 
-def train_and_save_BART(hyperparameters_dict, selfies_path="./data/selfies_subset.txt", bpe_path="./data/bpe/", save_to="./saved_model/"):
+
+def train_and_save_BART(
+    hyperparameters_dict,
+    selfies_path="./data/selfies_subset.txt",
+    bpe_path="./data/bpe/",
+    save_to="./saved_model/",
+):
     TRAIN_BATCH_SIZE = hyperparameters_dict["TRAIN_BATCH_SIZE"]
     VALID_BATCH_SIZE = hyperparameters_dict["VALID_BATCH_SIZE"]
     TRAIN_EPOCHS = hyperparameters_dict["TRAIN_EPOCHS"]
@@ -19,9 +21,10 @@ def train_and_save_BART(hyperparameters_dict, selfies_path="./data/selfies_subse
     WEIGHT_DECAY = hyperparameters_dict["WEIGHT_DECAY"]
     MAX_LEN = hyperparameters_dict["MAX_LEN"]
 
-
     # TODO: Figure out if this is which tokenizer or class utilized for this...
-    tokenizer = Tokenizer.from_file(f"{bpe_path}/bpe.json")  # TODO: integrate this better #to just accept file path for this...
+    tokenizer = Tokenizer.from_file(
+        f"{bpe_path}/bpe.json"
+    )  # TODO: integrate this better #to just accept file path for this...
 
     # with open(args.hyperparameters_path) as file:
     #     hyperparameters = yaml.safe_load(file)
@@ -30,30 +33,38 @@ def train_and_save_BART(hyperparameters_dict, selfies_path="./data/selfies_subse
 
     config = BartConfig(
         vocab_size=tokenizer.get_vocab_size(),  # Set vocab size including special tokens
-        max_position_embeddings=hyperparameters_dict["MAX_POSITION_EMBEDDINGS"],  # Adjust based on your needs
+        max_position_embeddings=hyperparameters_dict[
+            "MAX_POSITION_EMBEDDINGS"
+        ],  # Adjust based on your needs
         encoder_layers=hyperparameters_dict["ENCODER_LAYERS"],
         decoder_layers=hyperparameters_dict["DECODER_LAYERS"],
         encoder_attention_heads=hyperparameters_dict["NUM_ENCODER_ATTENTION_HEADS"],
         decoder_attention_heads=hyperparameters_dict["NUM_DECODER_ATTENTION_HEADS"],
         encoder_ffn_dim=hyperparameters_dict["ENCODER_FFN_DIM"],
         decoder_ffn_dim=hyperparameters_dict["DECODER_FFN_DIM"],
-        hidden_size=hyperparameters_dict["HIDDEN_SIZE"],  # Ensure this is divisible by the number of attention heads/ doesn't exist?
+        hidden_size=hyperparameters_dict[
+            "HIDDEN_SIZE"
+        ],  # Ensure this is divisible by the number of attention heads/ doesn't exist?
         pad_token_id=tokenizer.token_to_id("<pad>"),
         bos_token_id=tokenizer.token_to_id("<s>"),
         eos_token_id=tokenizer.token_to_id("</s>"),
-        mask_token_id=tokenizer.token_to_id("<mask>")  # Ensure this matches the ID used during pre-training
+        mask_token_id=tokenizer.token_to_id(
+            "<mask>"
+        ),  # Ensure this matches the ID used during pre-training
     )
 
     # Utilized in Trainer below
     def _model_init():
         return BartForConditionalGeneration(config=config)
 
-    df = pd.read_csv(selfies_path, header=None) # SELFIES string path... this should be in .CSV format.
-    
+    df = pd.read_csv(
+        selfies_path, header=None
+    )  # SELFIES string path... this should be in .CSV format.
 
     # TODO: or is this the below one?
-    tokenizer = SelfiesTokenizer(bpe_path) # TODO: GOT TO GET BPE SETUP RIGHT ON HERE...
-
+    tokenizer = SelfiesTokenizer(
+        bpe_path
+    )  # TODO: GOT TO GET BPE SETUP RIGHT ON HERE...
 
     # # WIP with code from other...
     # pretrain_dataset = SelfiesDataset(csv_file='./ChEMBL34_druglike_activity.csv',
@@ -99,7 +110,12 @@ def train_and_save_BART(hyperparameters_dict, selfies_path="./data/selfies_subse
         # prediction_loss_only=True,
     )
 
-    print("build trainer with on device:", training_args.device, "with n gpus:", training_args.n_gpu)
+    print(
+        "build trainer with on device:",
+        training_args.device,
+        "with n gpus:",
+        training_args.n_gpu,
+    )
     trainer.train()
     print("training finished.")
 

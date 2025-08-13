@@ -196,16 +196,25 @@
 ### end
 
 
-from transformers import BartForConditionalGeneration, BartConfig, Trainer, TrainingArguments
-import pandas as pd
+from transformers import (
+    BartForConditionalGeneration,
+    BartConfig,
+    Trainer,
+    TrainingArguments,
+)
 from tokenizers import Tokenizer
 from torch.utils.data import DataLoader
-import torch
 import math
 
 from SelfiesDataHandler import SelfiesDataset, collate_fn
 
-def train_and_save_BART(hyperparameters_dict, selfies_path="./data/selfies_subset.txt", bpe_path="./data/bpe/", save_to="./models/saved_model/"):
+
+def train_and_save_BART(
+    hyperparameters_dict,
+    selfies_path="./data/selfies_subset.txt",
+    bpe_path="./data/bpe/",
+    save_to="./models/saved_model/",
+):
     print("Hyperparameters used for training:", hyperparameters_dict)
     TRAIN_BATCH_SIZE = hyperparameters_dict["TRAIN_BATCH_SIZE"]
     VALID_BATCH_SIZE = hyperparameters_dict["VALID_BATCH_SIZE"]
@@ -229,7 +238,7 @@ def train_and_save_BART(hyperparameters_dict, selfies_path="./data/selfies_subse
         pad_token_id=tokenizer.token_to_id("<pad>"),
         bos_token_id=tokenizer.token_to_id("<s>"),
         eos_token_id=tokenizer.token_to_id("</s>"),
-        mask_token_id=tokenizer.token_to_id("<mask>")
+        mask_token_id=tokenizer.token_to_id("<mask>"),
     )
 
     # def _model_init():
@@ -237,9 +246,10 @@ def train_and_save_BART(hyperparameters_dict, selfies_path="./data/selfies_subse
 
     model = BartForConditionalGeneration(config=config)
 
-
-    dataset = SelfiesDataset(selfies_path, f"{bpe_path}/bpe.json", mode='pretrain')
-    data_loader = DataLoader(dataset, batch_size=TRAIN_BATCH_SIZE, shuffle=True, collate_fn=collate_fn)
+    dataset = SelfiesDataset(selfies_path, f"{bpe_path}/bpe.json", mode="pretrain")
+    data_loader = DataLoader(
+        dataset, batch_size=TRAIN_BATCH_SIZE, shuffle=True, collate_fn=collate_fn
+    )
 
     training_args = TrainingArguments(
         output_dir=save_to,
@@ -259,10 +269,15 @@ def train_and_save_BART(hyperparameters_dict, selfies_path="./data/selfies_subse
         args=training_args,
         train_dataset=dataset,
         eval_dataset=dataset,  # This can be changed to a separate validation dataset
-        data_collator=collate_fn
+        data_collator=collate_fn,
     )
 
-    print("build trainer with on device:", training_args.device, "with n gpus:", training_args.n_gpu)
+    print(
+        "build trainer with on device:",
+        training_args.device,
+        "with n gpus:",
+        training_args.n_gpu,
+    )
     trainer.train()
     print("training finished.")
 

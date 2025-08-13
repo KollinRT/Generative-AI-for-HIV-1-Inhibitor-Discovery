@@ -87,14 +87,18 @@
 #
 from rdkit import Chem
 import selfies as sf
+from rdkit.Chem.Scaffolds import MurckoScaffold
+
 
 def selfies_to_mol(selfies_string):
     """Convert a SELFIES string to an RDKit Mol object."""
     smiles = sf.decoder(selfies_string)  # Decode SELFIES to SMILES
-    return Chem.MolFromSmiles(smiles)    # Convert SMILES to RDKit molecule
+    return Chem.MolFromSmiles(smiles)  # Convert SMILES to RDKit molecule
+
+
 #
 #
-from rdkit.Chem.Scaffolds import MurckoScaffold
+
 
 def extract_scaffold_from_selfies(selfies_string):
     """Extract the Bemis-Murcko scaffold from a SELFIES string."""
@@ -103,6 +107,8 @@ def extract_scaffold_from_selfies(selfies_string):
         return None
     scaffold = MurckoScaffold.GetScaffoldForMol(mol)
     return Chem.MolToSmiles(scaffold)
+
+
 #
 #
 # import random
@@ -166,7 +172,7 @@ drugs = [
     "[C][C][N][C][=C][C][Branch1][C][C][=N][C][Branch2][Ring1][Branch2][N][C][C][N][C][=Branch1][C][=O][N][C][=C][C][Branch1][C][F][=C][C][Branch1][C][F][=C][Ring1][Branch2][=N][Ring2][Ring1][=Branch1]",
     "[C][C][C][C][=Branch1][C][=O][N][C][C][O][C][C][Ring1][Branch1][C][C][=C][C][=N][C][=C][Ring1][=Branch1]",
     "[O][=C][Branch2][Ring1][Ring2][N][N][=N][C][=C][C][Branch1][C][Cl][=C][Branch1][C][Cl][C][=C][Ring1][Branch2][Ring1][O][C][Branch1][C][F][Branch1][C][F][F]",
-    "[C][C][=C][N][=C][C][=C][Ring1][=Branch1][N][C][C][N][C][C][=C][C][=C][Branch1][#Branch1][O][C][Branch1][C][C][C][C][Branch1][C][Cl][=C][Ring1][O]"
+    "[C][C][=C][N][=C][C][=C][Ring1][=Branch1][N][C][C][N][C][C][=C][C][=C][Branch1][#Branch1][O][C][Branch1][C][C][C][C][Branch1][C][Cl][=C][Ring1][O]",
 ]
 for drug in drugs:
     print(extract_scaffold_from_selfies(drug))
@@ -200,6 +206,7 @@ for drug in drugs:
 # def editDist(s1, s2):
 #     return editDistRec(s1, s2, len(s1), len(s2))
 
+
 def edit_dist(s1, s2):
     m, n = len(s1), len(s2)
     prev = 0  # Stores dp[i-1][j-1]
@@ -223,7 +230,7 @@ string2 = "c1cc(CC2CCOC2)ccn1"
 
 print(edit_dist(string1, string2))
 
-#TODO: 01/01/2025:
+# TODO: 01/01/2025:
 """
 - Get some scaffolds and then calculate the word difference values?
 """

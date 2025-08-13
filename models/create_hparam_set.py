@@ -1,7 +1,15 @@
 import yaml
 
 
-def create_hparam_yml(TRAIN_BATCH_SIZE, TRAIN_EPOCHS, LEARNING_RATE, WEIGHT_DECAY, NUM_ATTENTION_HEADS, NUM_HIDDEN_LAYERS, save_to="hparams.yml"):
+def create_hparam_yml(
+    TRAIN_BATCH_SIZE,
+    TRAIN_EPOCHS,
+    LEARNING_RATE,
+    WEIGHT_DECAY,
+    NUM_ATTENTION_HEADS,
+    NUM_HIDDEN_LAYERS,
+    save_to="hparams.yml",
+):
     # Hyperparameters
     hparams = {}
     set_no = 0
@@ -37,4 +45,11 @@ def create_hparam_yml(TRAIN_BATCH_SIZE, TRAIN_EPOCHS, LEARNING_RATE, WEIGHT_DECA
         yaml.dump(hparams, f)
 
 
-create_hparam_yml(TRAIN_BATCH_SIZE=[16, 32, 64], TRAIN_EPOCHS=[5, 10], LEARNING_RATE=[1e-5], WEIGHT_DECAY=[0.001], NUM_ATTENTION_HEADS=[4, 8], NUM_HIDDEN_LAYERS=[8, 12])
+create_hparam_yml(
+    TRAIN_BATCH_SIZE=[16, 32, 64],
+    TRAIN_EPOCHS=[5, 10],
+    LEARNING_RATE=[1e-5],
+    WEIGHT_DECAY=[0.001],
+    NUM_ATTENTION_HEADS=[4, 8],
+    NUM_HIDDEN_LAYERS=[8, 12],
+)

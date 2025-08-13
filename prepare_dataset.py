@@ -5,12 +5,7 @@ import logging
 
 
 from tokenizers import Tokenizer
-from tokenizers.models import BPE
-from tokenizers.pre_tokenizers import Split
-from tokenizers import Regex
 from tokenizers.processors import TemplateProcessing
-from tokenizers.trainers import BpeTrainer
-from os import mkdir
 
 
 # def convert_to_selfies(smiles_col):  # returns selfies representation of smiles string. if there is no representation return smiles unchanged.
@@ -21,14 +16,20 @@ from os import mkdir
 #         return smiles_col
 
 # Setup basic configuration for logging
-logging.basicConfig(filename="conversion_errors.log", level=logging.INFO,
-                    format='%(asctime)s:%(levelname)s:%(message)s')
+logging.basicConfig(
+    filename="conversion_errors.log",
+    level=logging.INFO,
+    format="%(asctime)s:%(levelname)s:%(message)s",
+)
+
 
 def convert_to_selfies(smiles_string, index=None):
     try:
         return sf.encoder(smiles_string)
     except sf.EncoderError:
-        logging.info(f"EncoderError in Conversion at index {index} for SMILES: {smiles_string}")
+        logging.info(
+            f"EncoderError in Conversion at index {index} for SMILES: {smiles_string}"
+        )
         return None  # Return None or a specific flag to indicate conversion failure
 
 
@@ -53,34 +54,43 @@ def convert_to_selfies(smiles_string, index=None):
 #     # Save to a .csv file
 #     smiles_data.to_csv(save_to, index=False)
 
-def prepare_dataset_for_pretrain(path="data/smiles.csv", save_to="data/selfies_ready.csv"):
+
+def prepare_dataset_for_pretrain(
+    path="data/smiles.csv", save_to="data/selfies_ready.csv"
+):
     smiles_data = pd.read_csv(path)
-    print(f"smiles_data.columns: {smiles_data.columns}") # DEBUG
+    print(f"smiles_data.columns: {smiles_data.columns}")  # DEBUG
     # print(smiles_data.data.head())
     pandarallel.initialize()
-    smiles_data["selfies"] = smiles_data["canonical_smiles"].parallel_apply(convert_to_selfies)
+    smiles_data["selfies"] = smiles_data["canonical_smiles"].parallel_apply(
+        convert_to_selfies
+    )
     smiles_data.drop(smiles_data[smiles_data.selfies.isnull()].index, inplace=True)
-    print(smiles_data.columns) # DEBUG
-    smiles_data.drop(columns=["canonical_smiles"], inplace=True) # TODO: Drop all besides selfies...
+    print(smiles_data.columns)  # DEBUG
+    smiles_data.drop(
+        columns=["canonical_smiles"], inplace=True
+    )  # TODO: Drop all besides selfies...
     print(f"smiles_data.columns post-drop: {smiles_data.columns}")
-    smiles_data.to_csv(save_to, index=False) # TODO: index=False, header=False for sure...
+    smiles_data.to_csv(
+        save_to, index=False
+    )  # TODO: index=False, header=False for sure...
 
-def create_selfies_file(selfies_df, save_to="./data/selfies_subset.txt", subset_size=100000, do_subset=True):
 
+def create_selfies_file(
+    selfies_df, save_to="./data/selfies_subset.txt", subset_size=100000, do_subset=True
+):
     selfies_df.sample(frac=1).reset_index(drop=True)  # shuffling
 
     if do_subset:
         selfies_subset = selfies_df.selfies[:subset_size]
     else:
         selfies_subset = selfies_df.selfies
-    selfies_subset = selfies_subset.to_frame() #
+    selfies_subset = selfies_subset.to_frame()  #
     selfies_subset["selfies"].to_csv(save_to, index=False, header=False)
     print("SELFIES_SUBSET here")
     print(selfies_subset)
     # TODO: ABOVE this should be where the save happens... not in prepare. this will be done after
     # prepare_dataset_for_pretrain is called.... iirc
-
-
 
 
 # def get_selfies_alphabet(read="./data.csv", path="./data/selfies_alphabet.csv"):
@@ -91,7 +101,10 @@ def create_selfies_file(selfies_df, save_to="./data/selfies_subset.txt", subset_
 #     with open(path, "w") as f:
 #         f.write(",".join(list(selfies_alphabet)))
 
-def get_selfies_alphabet(read="data/selfies_ready.csv", path="data/selfies_alphabet.csv"):
+
+def get_selfies_alphabet(
+    read="data/selfies_ready.csv", path="data/selfies_alphabet.csv"
+):
     df = pd.read_csv(read)
     selfies_array = df.selfies.to_numpy(copy=True)
     selfies_alphabet = sf.get_alphabet_from_selfies(selfies_array)
@@ -129,7 +142,7 @@ def get_selfies_only(path, save_to):
 #
 # 	tokenizer.save(save_to + "/bpe.json", pretty=True)
 # 	tokenizer.model.save(save_to)
-from tokenizers import Tokenizer, models, pre_tokenizers, trainers, processors
+from tokenizers import models, pre_tokenizers, trainers
 
 # TODO: Should be more improved to more comprehensively deals with SELFIES than the previous BPE tokenizer.
 # def bpe_tokenizer(path="./data/selfies_subset.txt", save_to="./data/bpe/"):
@@ -179,8 +192,8 @@ from tokenizers import Tokenizer, models, pre_tokenizers, trainers, processors
 #     tokenizer.model.save(save_to)
 #
 
-#import os
-#def bpe_tokenizer(path="./data/selfies_subset.txt", save_to="./data/bpe/"):
+# import os
+# def bpe_tokenizer(path="./data/selfies_subset.txt", save_to="./data/bpe/"):
 #    """
 #    BPE tokenizer configured for SELFIES data and suitable for generative tasks using models like BART.
 #
@@ -219,14 +232,10 @@ from tokenizers import Tokenizer, models, pre_tokenizers, trainers, processors
 # check with vocab
 
 import os
-import re
 
-from tokenizers import Tokenizer, models, trainers, pre_tokenizers
-from tokenizers.processors import TemplateProcessing
 
 def bpe_tokenizer(
-    path: str = "./data/selfies_subset.txt",
-    save_to: str = "./data/bpe/"
+    path: str = "./data/selfies_subset.txt", save_to: str = "./data/bpe/"
 ) -> None:
     """
     BPE tokenizer configured for SELFIES strings,
@@ -275,7 +284,7 @@ def bpe_tokenizer(
 
     print(f"✅ BPE tokenizer written to {save_to!r}")
 
+
 # TODO: 05/19/2025 16:04 pm ADD WORD_LEVEL TOKENIZER LOGIC HERE!
 def word_level_tokenizer():
     pass
-
