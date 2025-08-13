@@ -446,7 +446,7 @@ class HuggingFaceMoleculeGenerator:
             with torch.no_grad():
                 output_ids = self.model.generate(
                     input_ids=input_tensor.expand(current_batch_size, -1),
-                    max_length=22,
+                    max_length=63,
                     num_return_sequences=current_batch_size,
                     do_sample=True,
                     temperature=1.5,
@@ -1093,6 +1093,88 @@ def benchmark_generated_molecules_selfies_parquet_bloom(
 
 
 
+import os
+import pandas as pd
+from cuckoopy import CuckooFilter
+
+def benchmark_generated_molecules_selfies_parquet_cuckoo(
+    gen,
+    selfies_pt,
+    num_samples=5000,
+    batch_size=100,
+    output_csv="generated_molecules.csv",
+    output_txt="generated_molecules.txt",
+    cuckoo_capacity=900_000_000,
+    bucket_size=4,
+    fingerprint_size=16,
+    max_displacements=500
+):
+    """
+    Benchmarks generated SELFIES using a Cuckoo filter for novelty checking.
+    """
+
+    # ✅ Step 1: Load training data into Cuckoo filter
+    cuckoo_filter = CuckooFilter(
+        capacity=cuckoo_capacity,
+        bucket_size=bucket_size,
+        fingerprint_size=fingerprint_size,
+        max_displacements=max_displacements
+    )
+
+    if isinstance(selfies_pt, str):
+        if not os.path.exists(selfies_pt):
+            raise FileNotFoundError(f"Parquet file not found: {selfies_pt}")
+        df_train = pd.read_parquet(selfies_pt)
+        selfies_series = df_train["selfies"].dropna().astype(str)
+    elif isinstance(selfies_pt, pd.DataFrame):
+        selfies_series = selfies_pt["selfies"].dropna().astype(str)
+    else:
+        raise ValueError("`selfies_pt` must be a path to a Parquet file or a pandas DataFrame.")
+
+    for s in selfies_series:
+        cuckoo_filter.insert(s)
+
+    # ✅ Step 2: Generate SELFIES strings
+    generated_selfies = gen.sample(num_samples, batch_size=batch_size, prefix="")
+
+    # ✅ Step 3: Uniqueness
+    unique_selfies_set = set(generated_selfies)
+    uniqueness = (len(unique_selfies_set) / len(generated_selfies)) * 100 if generated_selfies else 0
+
+    # ✅ Step 4: Novelty using Cuckoo filter
+    novel_selfies = [s for s in unique_selfies_set if not cuckoo_filter.contains(s)]
+    novelty = (len(novel_selfies) / len(unique_selfies_set)) * 100 if unique_selfies_set else 0
+
+    # ✅ Step 5: Save to CSV
+    df = pd.DataFrame({
+        "SELFIES": list(unique_selfies_set),
+        "Novel": [s in novel_selfies for s in unique_selfies_set],
+        "Unique": [True] * len(unique_selfies_set),
+    })
+    df.to_csv(output_csv, index=False)
+    print(f"📁 Generated molecules saved to: {output_csv}")
+
+    # ✅ Step 6: Save summary
+    results = {
+        "Total Generated": len(generated_selfies),
+        "Valid Unique SELFIES": len(unique_selfies_set),
+        "% Uniqueness": round(uniqueness, 3),
+        "Novel Molecules": len(novel_selfies),
+        "% Novelty": round(novelty, 3),
+    }
+
+    print("\n📊 Benchmark Results:")
+    with open(output_txt, "w") as f:
+        f.write("📊 Benchmark Results:\n")
+        for k, v in results.items():
+            line = f"{k}: {v}"
+            print(line)
+            f.write(line + "\n")
+
+    print(f"\n📝 Benchmark summary saved to: {output_txt}")
+    return results
+
+
 ### --- 5️⃣ Run Benchmarking --- ###
 if __name__ == "__main__":
     import time
@@ -1109,7 +1191,8 @@ if __name__ == "__main__":
 
     benchmark_dir = f"./benchmark_runs"
 
-    mol_sizes = [50,100,1_000,10_000,100_000,1_000_000]
+    # mol_sizes = [50,100,1_000,10_000,100_000,1_000_000]
+    mol_sizes = [50,100,1_000,10_000,20_000,30_000,40_000,50_000,60_000,70_000,80_000,90_000,100_000]
 
     output_csv = f"{MOL_SIZE}_real_{real_amount}_generated_molecules.csv"
     # TODO: 06/22/2025 GET full dataset from singular csv
@@ -1119,11 +1202,38 @@ if __name__ == "__main__":
     #     tokenizer_path="full_tokenizer_finetune_and_pretrain",
     #     device="cuda" if torch.cuda.is_available() else "cpu"
     # )
+    # gen = HuggingFaceMoleculeGenerator(
+    #     model_path="./runs/selfies_BART_PRETRAIN_model_4_warmup/model",
+    #     tokenizer_path="full_tokenizer_finetune_and_pretrain",
+    #     device="cuda" if torch.cuda.is_available() else "cpu"
+    # )
+
+    # gen = HuggingFaceMoleculeGenerator(
+    #     model_path="./runs/selfies_BART_PRETRAIN_model_small_lamb_earlyS_extradropout_highLR_lowThresh/model",
+    #     tokenizer_path="full_tokenizer_finetune_and_pretrain",
+    #     device="cuda" if torch.cuda.is_available() else "cpu"
+    # )
+    # gen = HuggingFaceMoleculeGenerator(
+    #     model_path="./runs/selfies_BART_PRETRAIN_model_small_lamb_earlyS_extradropout_highLR_lowThresh_or7th/model",
+    #     tokenizer_path="full_tokenizer_finetune_and_pretrain",
+    #     device="cuda" if torch.cuda.is_available() else "cpu"
+    # )
+
+    # Finetuned
+    # gen = HuggingFaceMoleculeGenerator(
+    #     model_path="./runs/selfies_BART_finetune_model_baseline_tuned/model",
+    #     tokenizer_path="full_tokenizer_finetune_and_pretrain",
+    #     device="cuda" if torch.cuda.is_available() else "cpu"
+    # )
+
+    # Fine tuned best model 3x (increased 2x then 3x and yeah it was best)
     gen = HuggingFaceMoleculeGenerator(
-        model_path="./runs/selfies_BART_PRETRAIN_model_4_warmup/model",
+        model_path="./runs/selfies_BART_finetune_model_small_adamw_earlyS_6_long_3x/model",
         tokenizer_path="full_tokenizer_finetune_and_pretrain",
         device="cuda" if torch.cuda.is_available() else "cpu"
     )
+
+
     start_time = time.time()
 
 
@@ -1150,15 +1260,35 @@ if __name__ == "__main__":
         #     output_txt=output_txt
         # )
 
+        # benchmark_results = benchmark_generated_molecules_selfies_parquet_bloom(
+        #     gen,
+        #     selfies_pt="./model_4_warmup_FP_pre_cleaned.parquet",
+        #     num_samples=num_samples,
+        #     batch_size=batch_size,
+        #     output_csv=output_csv,
+        #     output_txt=output_txt
+        # )
+
         benchmark_results = benchmark_generated_molecules_selfies_parquet_bloom(
             gen,
             selfies_pt="./model_4_warmup_FP_pre_cleaned.parquet",
             num_samples=num_samples,
             batch_size=batch_size,
             output_csv=output_csv,
-            output_txt=output_txt
+            output_txt=output_txt,
+            bloom_error_rate=0.05
         )
 
+
+
+        # benchmark_results = benchmark_generated_molecules_selfies_parquet_cuckoo(
+        #     gen,
+        #     selfies_pt="./model_4_warmup_FP_pre_cleaned.parquet",
+        #     num_samples=num_samples,
+        #     batch_size=batch_size,
+        #     output_csv=output_csv,
+        #     output_txt=output_txt
+        # )
 
 
         duration = round(time.time() - start_time, 2)
