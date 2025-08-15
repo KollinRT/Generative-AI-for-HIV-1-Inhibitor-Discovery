@@ -3,7 +3,18 @@ import csv
 import itertools
 import os
 from os.path import isfile
-from typing import Any, Dict, Mapping, Optional, List, Tuple, Iterable, Iterator, Sequence, TypedDict
+from typing import (
+    Any,
+    Dict,
+    Mapping,
+    Optional,
+    List,
+    Tuple,
+    Iterable,
+    Iterator,
+    Sequence,
+    TypedDict,
+)
 
 import dask.dataframe as dd
 import pandas as pd
@@ -35,10 +46,12 @@ gpu_used = "B200"
 
 # gpu_used = "4090"
 
+
 class BatchDict(TypedDict):
     input_ids: torch.Tensor
     attention_mask: torch.Tensor
     labels: torch.Tensor
+
 
 class TrainConfig(TypedDict, total=False):
     # training / validation cadence
@@ -95,6 +108,7 @@ def run_validation_batched(
     avg_val_loss: float = total_val_loss / batches_seen
     return avg_val_loss
 
+
 def train_for_pretrain_steps(
     model: BartForConditionalGeneration,
     train_loader: DataLoader[BatchDict],
@@ -125,7 +139,9 @@ def train_for_pretrain_steps(
 
     # === Setup ===
     # train_iterator = itertools.cycle(train_loader)  # Infinite looping
-    train_iterator: Iterator[BatchDict] = itertools.cycle(train_loader)  # Infinite looping
+    train_iterator: Iterator[BatchDict] = itertools.cycle(
+        train_loader
+    )  # Infinite looping
     os.makedirs(save_dir, exist_ok=True)
     # csv_file = open(csv_file_path, "w", newline="")
     # csv_writer = csv.writer(csv_file)
@@ -186,7 +202,6 @@ def train_for_pretrain_steps(
         best_val_loss = float(checkpoint["best_val_loss"])
         patience = int(checkpoint["patience"])
         global_step = int(checkpoint["step"]) + 1
-
 
         # ✅ ADD THIS BLOCK HERE — right after loading global_step
         if os.path.exists(csv_file_path):
@@ -288,9 +303,12 @@ def train_for_pretrain_steps(
                 #     max_batches=max_valid_batches,
                 # )
                 avg_val_loss: float = run_validation_batched(
-                    model, global_step, val_loader, device, max_batches=max_valid_batches
+                    model,
+                    global_step,
+                    val_loader,
+                    device,
+                    max_batches=max_valid_batches,
                 )
-
 
                 # Save best model
                 if avg_val_loss < best_val_loss - early_stopping_threshold:
@@ -499,13 +517,11 @@ def pretrain_BART(
     model_save_dir: str = os.path.join(run_dir, "model")
     csv_file_path: str = os.path.join(run_dir, "pretraining_loss.csv")
 
-
     # Define Training Hyperparameters
     # train_batch_size = current_config["TRAIN_BATCH_SIZE"]
     # val_batch_size = current_config["VALID_BATCH_SIZE"]
     train_batch_size: int = current_config["TRAIN_BATCH_SIZE"]
     val_batch_size: int = current_config["VALID_BATCH_SIZE"]
-
 
     # Load the tokenizer
     # tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer")
@@ -553,8 +569,9 @@ def pretrain_BART(
     # train_partitions = list(range(int(n_partitions * 0.9)))  # first 90%
     # val_partitions = list(range(int(n_partitions * 0.9), n_partitions))  # last 10%
     train_partitions: List[int] = list(range(int(n_partitions * 0.9)))  # first 90%
-    val_partitions: List[int] = list(range(int(n_partitions * 0.9), n_partitions))  # last 10%
-
+    val_partitions: List[int] = list(
+        range(int(n_partitions * 0.9), n_partitions)
+    )  # last 10%
 
     train_dataset = SelfiesIterableDataset(
         parquet_path, tokenizer, partitions=train_partitions, mode="pretrain"

@@ -1,5 +1,17 @@
 import os
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple, Union, TypedDict
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+    TypedDict,
+)
 
 import pandas as pd
 import selfies as sf
@@ -36,7 +48,7 @@ class BenchmarkResults(TypedDict):
 
 # def build_bloom_filter_from_parquet(parquet_path, column="selfies", error_rate=0.001):
 def build_bloom_filter_from_parquet(
-        parquet_path: str, column: str = "selfies", error_rate: float = 0.001
+    parquet_path: str, column: str = "selfies", error_rate: float = 0.001
 ) -> ScalableBloomFilter:
     """
     Builds a Bloom filter from a large Parquet file.
@@ -173,9 +185,13 @@ class HuggingFaceMoleculeGenerator:
         #     .eval()
         # )
         self.device: torch.device = torch.device(device)
-        self.tokenizer: PreTrainedTokenizerFast = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
+        self.tokenizer: PreTrainedTokenizerFast = (
+            PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
+        )
         self.model: BartForConditionalGeneration = (
-            BartForConditionalGeneration.from_pretrained(model_path).to(self.device).eval()
+            BartForConditionalGeneration.from_pretrained(model_path)
+            .to(self.device)
+            .eval()
         )
 
         # Configure forbidden ids (either strings or ids)
@@ -198,10 +214,14 @@ class HuggingFaceMoleculeGenerator:
             # ids_from_strings = self.tokenizer.convert_tokens_to_ids(list(forbidden_tokens))
             ids_from_strings = self.tokenizer.convert_tokens_to_ids(forbidden_tokens)
         cleaned_from_strings: List[int] = [
-            i for i in ids_from_strings if i is not None and i != self.tokenizer.unk_token_id
+            i
+            for i in ids_from_strings
+            if i is not None and i != self.tokenizer.unk_token_id
         ]
 
-        self.forbidden_token_ids: Set[int] = set((forbidden_token_ids or [])) | set(cleaned_from_strings)
+        self.forbidden_token_ids: Set[int] = set((forbidden_token_ids or [])) | set(
+            cleaned_from_strings
+        )
 
         print(f"✅ Fine-tuned model loaded from {model_path}")
         if self.forbidden_token_ids:
@@ -588,11 +608,11 @@ class HuggingFaceMoleculeGenerator:
 
     # def sample(self, n, batch_size=100, prefix="", output_csv="output2.csv"):
     def sample(
-            self,
-            n: int,
-            batch_size: int = 100,
-            prefix: str = "",
-            output_csv: Optional[str] = "output2.csv",
+        self,
+        n: int,
+        batch_size: int = 100,
+        prefix: str = "",
+        output_csv: Optional[str] = "output2.csv",
     ) -> List[str]:
         if not prefix.strip():
             print("⚠️ Empty prefix provided. Using default '<s>'.")
@@ -678,7 +698,7 @@ def is_valid_smiles(smiles: str) -> bool:
 
 # def check_novelty(smiles_list, train_set, pretrain_set):
 def check_novelty(
-        smiles_list: Sequence[str], train_set: Set[str], pretrain_set: Set[str]
+    smiles_list: Sequence[str], train_set: Set[str], pretrain_set: Set[str]
 ) -> List[str]:
     """Parallelized function to check novelty of molecules.
 
@@ -698,13 +718,13 @@ def check_novelty(
 
 
 def benchmark_generated_molecules_selfies_parquet(
-        gen: HuggingFaceMoleculeGenerator,
-        selfies_pt: Union[str, pd.DataFrame],
-        num_samples: int = 5000,
-        batch_size: int = 100,
-        output_csv: str = "generated_molecules.csv",
-        output_txt: str = "generated_molecules.txt",
-        temp_train_set_path: str = "train_selfies.txt",
+    gen: HuggingFaceMoleculeGenerator,
+    selfies_pt: Union[str, pd.DataFrame],
+    num_samples: int = 5000,
+    batch_size: int = 100,
+    output_csv: str = "generated_molecules.csv",
+    output_txt: str = "generated_molecules.txt",
+    temp_train_set_path: str = "train_selfies.txt",
 ) -> BenchmarkResults:
     """
     Benchmarks generated SELFIES for uniqueness and novelty.
@@ -752,7 +772,11 @@ def benchmark_generated_molecules_selfies_parquet(
     #     else 0
     # )
     unique_selfies_set: Set[str] = set(generated_selfies)
-    uniqueness: float = (len(unique_selfies_set) / len(generated_selfies) * 100) if generated_selfies else 0.0
+    uniqueness: float = (
+        (len(unique_selfies_set) / len(generated_selfies) * 100)
+        if generated_selfies
+        else 0.0
+    )
 
     # Step 5: Novelty
     # novel_selfies = list(unique_selfies_set - train_selfies_set)
@@ -762,8 +786,11 @@ def benchmark_generated_molecules_selfies_parquet(
     #     else 0
     # )
     novel_selfies: List[str] = list(unique_selfies_set - train_selfies_set)
-    novelty: float = (len(novel_selfies) / len(unique_selfies_set) * 100) if unique_selfies_set else 0.0
-
+    novelty: float = (
+        (len(novel_selfies) / len(unique_selfies_set) * 100)
+        if unique_selfies_set
+        else 0.0
+    )
 
     # Step 6: Save output CSV
     df = pd.DataFrame(
@@ -904,7 +931,6 @@ if __name__ == "__main__":
     elif real_amount >= 10_000:
         batch_size = 20
 
-
     benchmark_dir = "./benchmark_runs"
 
     # mol_sizes = [50,100,1_000,10_000,100_000,1_000_000]
@@ -938,7 +964,6 @@ if __name__ == "__main__":
         90_000,
         100_000,
     ]
-
 
     output_csv = f"{MOL_SIZE}_real_{real_amount}_generated_molecules.csv"
     # TODO: 06/22/2025 GET full dataset from singular csv
@@ -1003,7 +1028,6 @@ if __name__ == "__main__":
         # Removed additional "." character
         ".",
     ]
-
 
     gen = HuggingFaceMoleculeGenerator(
         model_path="./runs/selfies_BART_finetune_model_small_adamw_earlyS_6_long_3x/model",
