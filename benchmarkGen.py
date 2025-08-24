@@ -146,55 +146,55 @@ def load_smiles_from_csv(csv_path: str, selfies_column: str = "selfies") -> Set[
 
 ### --- 3️⃣ Define Model Wrapper for Generation --- ###
 # class HuggingFaceMoleculeGenerator:
-    # def __init__(
-    #     self,
-    #     model_path: str,
-    #     tokenizer_path: str,
-    #     device: str = "cuda",
-    #     forbidden_tokens: Optional[Sequence[str]] = None,
-    #     forbidden_token_ids: Optional[Sequence[int]] = None,
-    # ) -> None:
-    #     self.device: torch.device = torch.device(device)
-    #     self.tokenizer: PreTrainedTokenizerFast = (
-    #         PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
-    #     )
-    #     self.model: BartForConditionalGeneration = (
-    #         BartForConditionalGeneration.from_pretrained(model_path)
-    #         .to(self.device)
-    #         .eval()
-    #     )
-    #     # Configure forbidden ids (either strings or ids)
-    #     ids_from_strings: List[Optional[int]] = []
-    #     if forbidden_tokens:
-    #         # Each string can be one token or multiple; we only suppress single-token strings here.
-    #         # ids_from_strings = self.tokenizer.convert_tokens_to_ids(list(forbidden_tokens))
-    #         ids_from_strings = self.tokenizer.convert_tokens_to_ids(forbidden_tokens)
-    #     cleaned_from_strings: List[int] = [
-    #         i
-    #         for i in ids_from_strings
-    #         if i is not None and i != self.tokenizer.unk_token_id
-    #     ]
-    #
-    #     self.forbidden_token_ids: Set[int] = set((forbidden_token_ids or [])) | set(
-    #         cleaned_from_strings
-    #     )
-    #
-    #     print(f"✅ Fine-tuned model loaded from {model_path}")
-    #     if self.forbidden_token_ids:
-    #         print(
-    #             f"🚫 Will suppress {len(self.forbidden_token_ids)} token ids during generation."
-    #         )
+# def __init__(
+#     self,
+#     model_path: str,
+#     tokenizer_path: str,
+#     device: str = "cuda",
+#     forbidden_tokens: Optional[Sequence[str]] = None,
+#     forbidden_token_ids: Optional[Sequence[int]] = None,
+# ) -> None:
+#     self.device: torch.device = torch.device(device)
+#     self.tokenizer: PreTrainedTokenizerFast = (
+#         PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
+#     )
+#     self.model: BartForConditionalGeneration = (
+#         BartForConditionalGeneration.from_pretrained(model_path)
+#         .to(self.device)
+#         .eval()
+#     )
+#     # Configure forbidden ids (either strings or ids)
+#     ids_from_strings: List[Optional[int]] = []
+#     if forbidden_tokens:
+#         # Each string can be one token or multiple; we only suppress single-token strings here.
+#         # ids_from_strings = self.tokenizer.convert_tokens_to_ids(list(forbidden_tokens))
+#         ids_from_strings = self.tokenizer.convert_tokens_to_ids(forbidden_tokens)
+#     cleaned_from_strings: List[int] = [
+#         i
+#         for i in ids_from_strings
+#         if i is not None and i != self.tokenizer.unk_token_id
+#     ]
+#
+#     self.forbidden_token_ids: Set[int] = set((forbidden_token_ids or [])) | set(
+#         cleaned_from_strings
+#     )
+#
+#     print(f"✅ Fine-tuned model loaded from {model_path}")
+#     if self.forbidden_token_ids:
+#         print(
+#             f"🚫 Will suppress {len(self.forbidden_token_ids)} token ids during generation."
+#         )
 class HuggingFaceMoleculeGenerator:
     def __init__(
-            self,
-            model_path: str,
-            tokenizer_path: str,
-            device: str = "cuda",
-            forbidden_tokens: Optional[Sequence[str]] = None,
-            forbidden_token_ids: Optional[Sequence[int]] = None,
-            # ↓↓↓ NEW
-            scaffold_sequences: Optional[Sequence[Sequence[str]]] = None,
-            scaffold_bias: float = 0.0,
+        self,
+        model_path: str,
+        tokenizer_path: str,
+        device: str = "cuda",
+        forbidden_tokens: Optional[Sequence[str]] = None,
+        forbidden_token_ids: Optional[Sequence[int]] = None,
+        # ↓↓↓ NEW
+        scaffold_sequences: Optional[Sequence[Sequence[str]]] = None,
+        scaffold_bias: float = 0.0,
     ) -> None:
         self.device: torch.device = torch.device(device)
         self.tokenizer: PreTrainedTokenizerFast = (
@@ -211,10 +211,13 @@ class HuggingFaceMoleculeGenerator:
         if forbidden_tokens:
             ids_from_strings = self.tokenizer.convert_tokens_to_ids(forbidden_tokens)
         cleaned_from_strings: List[int] = [
-            i for i in ids_from_strings
+            i
+            for i in ids_from_strings
             if i is not None and i != self.tokenizer.unk_token_id
         ]
-        self.forbidden_token_ids: Set[int] = set((forbidden_token_ids or [])) | set(cleaned_from_strings)
+        self.forbidden_token_ids: Set[int] = set((forbidden_token_ids or [])) | set(
+            cleaned_from_strings
+        )
 
         # ↓↓↓ NEW: store scaffold bias map (tuple[id...] -> bias)
         self.scaffold_bias_map: dict[tuple[int, ...], float] = {}
@@ -223,17 +226,20 @@ class HuggingFaceMoleculeGenerator:
                 # convert SELFIES tokens to ids (skip UNKs/None)
                 ids = self.tokenizer.convert_tokens_to_ids(list(seq))
                 ids_clean: List[int] = [
-                    i for i in ids
-                    if i is not None and i != self.tokenizer.unk_token_id
+                    i for i in ids if i is not None and i != self.tokenizer.unk_token_id
                 ]
                 if len(ids_clean) >= 1:
                     self.scaffold_bias_map[tuple(ids_clean)] = float(scaffold_bias)
 
         print(f"✅ Fine-tuned model loaded from {model_path}")
         if self.forbidden_token_ids:
-            print(f"🚫 Will suppress {len(self.forbidden_token_ids)} token ids during generation.")
+            print(
+                f"🚫 Will suppress {len(self.forbidden_token_ids)} token ids during generation."
+            )
         if self.scaffold_bias_map:
-            print(f"🎯 Will bias {len(self.scaffold_bias_map)} scaffold sequence(s) by +{scaffold_bias} logits.")
+            print(
+                f"🎯 Will bias {len(self.scaffold_bias_map)} scaffold sequence(s) by +{scaffold_bias} logits."
+            )
 
     def selfies_to_smiles(self, selfies_list: Sequence[str]) -> List[str]:
         """Convert SELFIES to valid SMILES."""
@@ -271,13 +277,9 @@ class HuggingFaceMoleculeGenerator:
         if self.forbidden_token_ids:
             processors.append(MaskTokensLogitsProcessor(self.forbidden_token_ids))
 
-
-
         # ↓↓↓ NEW: softly bias toward chosen scaffolds
         if self.scaffold_bias_map:
             processors.append(SequenceBiasLogitsProcessor(self.scaffold_bias_map))
-
-
 
         total_generated = 0
         # all_selfies = []
@@ -707,17 +709,73 @@ if __name__ == "__main__":
     # Define desired SELFIES scaffolds as token lists (space-delimited tokens in your tokenizer)
     scaffolds = [
         # β-diketo acid (DKA)
-        ["[C]", "[C]", "[=Branch1]", "[C]", "[=O]", "[C]", "[C]", "[=Branch1]", "[C]", "[=O]", "[O]"],
+        [
+            "[C]",
+            "[C]",
+            "[=Branch1]",
+            "[C]",
+            "[=O]",
+            "[C]",
+            "[C]",
+            "[=Branch1]",
+            "[C]",
+            "[=O]",
+            "[O]",
+        ],
         # “naphthyridine carboxamide–like” → use a simple pyridine carboxamide (nicotinamide)
-        ["[N]", "[C]", "[=Branch1]", "[C]", "[=O]", "[C]", "[=C]", "[C]", "[=C]", "[C]", "[=N]", "[Ring1]", "[=Branch1]"],
+        [
+            "[N]",
+            "[C]",
+            "[=Branch1]",
+            "[C]",
+            "[=O]",
+            "[C]",
+            "[=C]",
+            "[C]",
+            "[=C]",
+            "[C]",
+            "[=N]",
+            "[Ring1]",
+            "[=Branch1]",
+        ],
         # quinolinone carboxylate–like → 2-pyridone-3-carboxylic acid (lactam form)
-        ["[O]", "[=C]", "[Branch1]", "[C]", "[O]", "[C]", "[=C]", "[C]", "[=C]", "[NH1]", "[C]", "[Ring1]", "[=Branch1]", "[=O]"],
+        [
+            "[O]",
+            "[=C]",
+            "[Branch1]",
+            "[C]",
+            "[O]",
+            "[C]",
+            "[=C]",
+            "[C]",
+            "[=C]",
+            "[NH1]",
+            "[C]",
+            "[Ring1]",
+            "[=Branch1]",
+            "[=O]",
+        ],
         # pyridinone (raltegravir-like minimal) → 2-pyridone (lactam form)
         ["[O]", "[=C]", "[C]", "[=C]", "[C]", "[=C]", "[NH1]", "[Ring1]", "[=Branch1]"],
         # diarylpyrimidinone (elvitegravir-like minimal) → 2-pyrimidinone (lactam)
         ["[O]", "[=C]", "[C]", "[=C]", "[N]", "[=C]", "[NH1]", "[Ring1]", "[=Branch1]"],
         # carbamoyl-pyridone (second-gen minimal) → 2-pyridone-3-carboxamide (lactam)
-        ["[N]", "[C]", "[=Branch1]", "[C]", "[=O]", "[C]", "[=C]", "[C]", "[=C]", "[NH1]", "[C]", "[Ring1]", "[=Branch1]", "[=O]"],
+        [
+            "[N]",
+            "[C]",
+            "[=Branch1]",
+            "[C]",
+            "[=O]",
+            "[C]",
+            "[=C]",
+            "[C]",
+            "[=C]",
+            "[NH1]",
+            "[C]",
+            "[Ring1]",
+            "[=Branch1]",
+            "[=O]",
+        ],
     ]
 
     # gen = HuggingFaceMoleculeGenerator(
