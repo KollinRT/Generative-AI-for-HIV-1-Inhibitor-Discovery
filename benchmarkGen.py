@@ -16,6 +16,7 @@ from transformers import (
     BartForConditionalGeneration,
     PreTrainedTokenizerFast,
     LogitsProcessorList,
+    SequenceBiasLogitsProcessor,  # ← NEW
 )
 
 from token_mapping import token_mapping
@@ -144,41 +145,57 @@ def load_smiles_from_csv(csv_path: str, selfies_column: str = "selfies") -> Set[
 
 
 ### --- 3️⃣ Define Model Wrapper for Generation --- ###
-class HuggingFaceMoleculeGenerator:
-    # def __init__(self, model_path, tokenizer_path, device="cuda"):
-    #     """Load Hugging Face BART model & tokenizer for molecule generation."""
-    #     self.device = torch.device(device)
-    #     self.tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
-    #
-    #     # ✅ Load model and weights
-    #     self.model = BartForConditionalGeneration.from_pretrained(model_path)
-    #     self.model.to(self.device)
-    #     self.model.eval()
-    #
-    #     print(f"✅ Fine-tuned model loaded from {model_path}")
+# class HuggingFaceMoleculeGenerator:
     # def __init__(
     #     self,
-    #     model_path,
-    #     tokenizer_path,
-    #     device="cuda",
-    #     forbidden_tokens=None,
-    #     forbidden_token_ids=None,
-    # ):
+    #     model_path: str,
+    #     tokenizer_path: str,
+    #     device: str = "cuda",
+    #     forbidden_tokens: Optional[Sequence[str]] = None,
+    #     forbidden_token_ids: Optional[Sequence[int]] = None,
+    # ) -> None:
+    #     self.device: torch.device = torch.device(device)
+    #     self.tokenizer: PreTrainedTokenizerFast = (
+    #         PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
+    #     )
+    #     self.model: BartForConditionalGeneration = (
+    #         BartForConditionalGeneration.from_pretrained(model_path)
+    #         .to(self.device)
+    #         .eval()
+    #     )
+    #     # Configure forbidden ids (either strings or ids)
+    #     ids_from_strings: List[Optional[int]] = []
+    #     if forbidden_tokens:
+    #         # Each string can be one token or multiple; we only suppress single-token strings here.
+    #         # ids_from_strings = self.tokenizer.convert_tokens_to_ids(list(forbidden_tokens))
+    #         ids_from_strings = self.tokenizer.convert_tokens_to_ids(forbidden_tokens)
+    #     cleaned_from_strings: List[int] = [
+    #         i
+    #         for i in ids_from_strings
+    #         if i is not None and i != self.tokenizer.unk_token_id
+    #     ]
+    #
+    #     self.forbidden_token_ids: Set[int] = set((forbidden_token_ids or [])) | set(
+    #         cleaned_from_strings
+    #     )
+    #
+    #     print(f"✅ Fine-tuned model loaded from {model_path}")
+    #     if self.forbidden_token_ids:
+    #         print(
+    #             f"🚫 Will suppress {len(self.forbidden_token_ids)} token ids during generation."
+    #         )
+class HuggingFaceMoleculeGenerator:
     def __init__(
-        self,
-        model_path: str,
-        tokenizer_path: str,
-        device: str = "cuda",
-        forbidden_tokens: Optional[Sequence[str]] = None,
-        forbidden_token_ids: Optional[Sequence[int]] = None,
+            self,
+            model_path: str,
+            tokenizer_path: str,
+            device: str = "cuda",
+            forbidden_tokens: Optional[Sequence[str]] = None,
+            forbidden_token_ids: Optional[Sequence[int]] = None,
+            # ↓↓↓ NEW
+            scaffold_sequences: Optional[Sequence[Sequence[str]]] = None,
+            scaffold_bias: float = 0.0,
     ) -> None:
-        # self.device = torch.device(device)
-        # self.tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
-        # self.model = (
-        #     BartForConditionalGeneration.from_pretrained(model_path)
-        #     .to(self.device)
-        #     .eval()
-        # )
         self.device: torch.device = torch.device(device)
         self.tokenizer: PreTrainedTokenizerFast = (
             PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
@@ -189,40 +206,34 @@ class HuggingFaceMoleculeGenerator:
             .eval()
         )
 
-        # Configure forbidden ids (either strings or ids)
-        # ids_from_strings = []
-        # if forbidden_tokens:
-        #     # Each string can be one token or multiple; we only suppress single-token strings here.
-        #     # For multi-token phrases, see option B below.
-        #     ids_from_strings = self.tokenizer.convert_tokens_to_ids(forbidden_tokens)
-        #     ids_from_strings = [
-        #         i
-        #         for i in ids_from_strings
-        #         if i is not None and i != self.tokenizer.unk_token_id
-        #     ]
-        #
-        # self.forbidden_token_ids = set((forbidden_token_ids or []) + ids_from_strings)
-        # Configure forbidden ids (either strings or ids)
+        # Forbidden ids (existing)
         ids_from_strings: List[Optional[int]] = []
         if forbidden_tokens:
-            # Each string can be one token or multiple; we only suppress single-token strings here.
-            # ids_from_strings = self.tokenizer.convert_tokens_to_ids(list(forbidden_tokens))
             ids_from_strings = self.tokenizer.convert_tokens_to_ids(forbidden_tokens)
         cleaned_from_strings: List[int] = [
-            i
-            for i in ids_from_strings
+            i for i in ids_from_strings
             if i is not None and i != self.tokenizer.unk_token_id
         ]
+        self.forbidden_token_ids: Set[int] = set((forbidden_token_ids or [])) | set(cleaned_from_strings)
 
-        self.forbidden_token_ids: Set[int] = set((forbidden_token_ids or [])) | set(
-            cleaned_from_strings
-        )
+        # ↓↓↓ NEW: store scaffold bias map (tuple[id...] -> bias)
+        self.scaffold_bias_map: dict[tuple[int, ...], float] = {}
+        if scaffold_sequences and scaffold_bias != 0.0:
+            for seq in scaffold_sequences:
+                # convert SELFIES tokens to ids (skip UNKs/None)
+                ids = self.tokenizer.convert_tokens_to_ids(list(seq))
+                ids_clean: List[int] = [
+                    i for i in ids
+                    if i is not None and i != self.tokenizer.unk_token_id
+                ]
+                if len(ids_clean) >= 1:
+                    self.scaffold_bias_map[tuple(ids_clean)] = float(scaffold_bias)
 
         print(f"✅ Fine-tuned model loaded from {model_path}")
         if self.forbidden_token_ids:
-            print(
-                f"🚫 Will suppress {len(self.forbidden_token_ids)} token ids during generation."
-            )
+            print(f"🚫 Will suppress {len(self.forbidden_token_ids)} token ids during generation.")
+        if self.scaffold_bias_map:
+            print(f"🎯 Will bias {len(self.scaffold_bias_map)} scaffold sequence(s) by +{scaffold_bias} logits.")
 
     def selfies_to_smiles(self, selfies_list: Sequence[str]) -> List[str]:
         """Convert SELFIES to valid SMILES."""
@@ -237,371 +248,6 @@ class HuggingFaceMoleculeGenerator:
                 continue  # Skip invalid molecules
         return smiles_list
 
-    # def sample(self, n, batch_size=100, prefix=""):
-    # def sample(self, n, batch_size=100, prefix="", output_csv=None):
-    #     """
-    #     Generate `n` molecules in smaller batches and return SMILES strings.
-    #     Args:
-    #         n: Number of molecules to sample
-    #         batch_size: Size of batch
-    #         prefix: Molecule starting tokens in SELFIES (tokenizer vocabulary)
-    #
-    #     Returns:
-    #
-    #     """
-    #     if not prefix.strip():
-    #         print("⚠️ Empty prefix provided. Using default '<s>'.")
-    #         prefix = "<s>"
-    #
-    #     input_text = prefix
-    #     tokens = input_text.split()  # Assumes space-delimited SELFIES tokens
-    #     print(tokens)
-    #     ids = self.tokenizer.convert_tokens_to_ids(tokens)
-    #     input_ids = torch.tensor([ids]).to(self.device)
-    #     print(input_ids)
-    #
-    #     generated_smiles = []
-    #
-    #     print(type(batch_size))
-    #     # for _ in range(0, n, batch_size):
-    #     #     current_batch_size = min(batch_size, n - len(generated_smiles))  # Handle last batch
-    #     #
-    #     #     with torch.no_grad():
-    #     #         # output_ids = self.model.generate(
-    #     #         #     input_ids.expand(current_batch_size, -1),  # Duplicate input for batch processing
-    #     #         #     max_length=500,
-    #     #         #     num_return_sequences=1,
-    #     #         #     do_sample=True,
-    #     #         #     temperature=2.5,
-    #     #         #     top_k=50,
-    #     #         #     top_p=0.95,
-    #     #         #     repetition_penalty=2.3,
-    #     #         #     num_beams=1
-    #     #         # )
-    #     #         # output_ids = self.model.generate(
-    #     #         #     input_ids=input_ids.expand(batch_size, -1),
-    #     #         #     max_length=50,
-    #     #         #     do_sample=True,
-    #     #         #     temperature=1.2,
-    #     #         #     top_k=50,
-    #     #         #     top_p=0.95,
-    #     #         #     repetition_penalty=1.2,
-    #     #         #     num_beams=1
-    #     #         #     #         prefix_allowed_tokens_fn=prefix_allowed_fn
-    #     #         # )
-    #     #         # output_ids = self.model.generate(
-    #     #         #     input_ids=input_ids.expand(batch_size, -1),
-    #     #         #     max_length=22,
-    #     #         #     num_return_sequences=batch_size,
-    #     #         #     do_sample=True,
-    #     #         #     temperature=1.2,
-    #     #         #     top_k=50,
-    #     #         #     top_p=0.95,
-    #     #         #     repetition_penalty=1.2,
-    #     #         #     num_beams=batch_size
-    #     #         #     # prefix_allowed_tokens_fn=prefix_allowed_fn
-    #     #         # )
-    #     #         # output_ids = self.model.generate(
-    #     #         #     input_ids=input_ids.expand(batch_size, -1),
-    #     #         #     max_length=22,
-    #     #         #     num_return_sequences=batch_size,
-    #     #         #     do_sample=True,
-    #     #         #     temperature=2.5,
-    #     #         #     top_k=50,
-    #     #         #     top_p=0.95,
-    #     #         #     repetition_penalty=1.2,
-    #     #         #     num_beams=batch_size
-    #     #         # )
-    #     #         # output_ids = self.model.generate(
-    #     #         #     input_ids=input_ids.repeat(batch_size, 1),
-    #     #         #     max_length=22,
-    #     #         #     num_return_sequences=batch_size,
-    #     #         #     do_sample=True,
-    #     #         #     temperature=2.5,
-    #     #         #     top_k=50,
-    #     #         #     top_p=0.95,
-    #     #         #     repetition_penalty=1.2,
-    #     #         #     num_beams=batch_size
-    #     #         # )
-    #     #         output_ids = self.model.generate(
-    #     #             input_ids=input_ids.expand(batch_size, -1),
-    #     #             max_length=22,
-    #     #             num_return_sequences=batch_size,
-    #     #             do_sample=True,
-    #     #             temperature=2.5,
-    #     #             top_k=50,
-    #     #             top_p=0.95,
-    #     #             repetition_penalty=1.2
-    #     #         )
-    #     #
-    #     #
-    #     #     print(f"Generated token IDs:\n{output_ids}")
-    #     #
-    #     #     selfies_list = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-    #     #     # decoded = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-    #     #     print(f"Decoded outputs:\n{selfies_list}")
-    #     #
-    #     #     # Apply mapping to all generated selfies before decoding
-    #     #     mapped_selfies_list = [apply_selfies_token_mapping(s) for s in selfies_list]
-    #     #     print("\n🧬 Mapped SELFIES after token mapping:")
-    #     #     print(mapped_selfies_list[:10])
-    #     #     # generated_smiles.extend(mapped_selfies_list)
-    #     #
-    #     #     smiles_list = []
-    #     #     for molecules in mapped_selfies_list:
-    #     #         smiles_list.append(molecules.replace(" ", ""))
-    #     #     # generated_smiles.extend([s for s in smiles_list if s is not None])  # Filter out invalid molecules
-    #     #     with open(output_csv, "a") as f:
-    #     #         for s in mapped_selfies_list:
-    #     #             if s:
-    #     #                 f.write(f"{s},True,Novel\n")  # use actual novelty check if needed
-    #
-    #     total_generated = 0  # Initialize before loop
-    #
-    #     for _ in range(0, n, batch_size):
-    #         current_batch_size = min(batch_size, n - total_generated)
-    #
-    #         with torch.no_grad():
-    #             output_ids = self.model.generate(
-    #                 input_ids=input_ids.expand(current_batch_size, -1),
-    #                 max_length=22,
-    #                 num_return_sequences=current_batch_size,
-    #                 do_sample=True,
-    #                 temperature=1.5,
-    #                 top_k=30,
-    #                 top_p=0.9,
-    #                 repetition_penalty=1.1,
-    #             )
-    #
-    #         output_ids = output_ids.cpu()
-    #         selfies_list = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-    #         # generated_smiles.extend(mapped_selfies_list)
-    #         mapped_selfies_list = [apply_selfies_token_mapping(s) for s in selfies_list]
-    #
-    #         with open(output_csv, "a") as f:
-    #             for s in mapped_selfies_list:
-    #                 if s:
-    #                     f.write(f"{s},True,Novel\n")
-    #
-    #         del output_ids
-    #         torch.cuda.empty_cache()
-    #         gc.collect()
-    #
-    #         print("Cleaned SELFIES:")
-    #         print(generated_smiles)
-    #
-    #         total_generated += current_batch_size
-    #
-    #     return generated_smiles
-    #     # return mapped_selfies_list
-
-    # def sample(self, n, batch_size=100, prefix="", output_csv="output2.csv"):
-    #     """
-    #     Generate `n` molecules in batches and return SMILES strings.
-    #
-    #     Args:
-    #         n (int): Total number of molecules to generate.
-    #         batch_size (int): Number of molecules per batch.
-    #         prefix (str): Starting SELFIES tokens (space-separated).
-    #         output_csv (str or None): Path to write outputs (optional).
-    #
-    #     Returns:
-    #         List[str]: List of generated SMILES strings.
-    #     """
-    #     if not prefix.strip():
-    #         print("⚠️ Empty prefix provided. Using default '<s>'.")
-    #         prefix = "<s>"
-    #
-    #     tokens = prefix.strip().split()
-    #     input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
-    #     input_tensor = torch.tensor([input_ids], device=self.device)
-    #
-    #     total_generated = 0
-    #     all_smiles = []
-    #
-    #     while total_generated < n:
-    #         current_batch_size = min(batch_size, n - total_generated)
-    #
-    #         with torch.no_grad():
-    #             output_ids = self.model.generate(
-    #                 input_ids=input_tensor.expand(current_batch_size, -1),
-    #                 max_length=22,
-    #                 num_return_sequences=current_batch_size,
-    #                 do_sample=True,
-    #                 temperature=1.5,
-    #                 top_k=30,
-    #                 top_p=0.9,
-    #                 repetition_penalty=1.1,
-    #             )
-    #
-    #         selfies_list = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-    #
-    #         # ✅ Apply token cleanup if needed
-    #         mapped_selfies_list = [apply_selfies_token_mapping(s) for s in selfies_list]
-    #
-    #         # ✅ Convert SELFIES to valid SMILES
-    #         smiles_list = self.selfies_to_smiles(mapped_selfies_list)
-    #         all_smiles.extend(smiles_list)
-    #
-    #         # ✅ Save to file if requested
-    #         if output_csv:
-    #             with open(output_csv, "a") as f:
-    #                 for s in smiles_list:
-    #                     f.write(f"{s},True,Novel\n")
-    #
-    #         total_generated += current_batch_size
-    #         torch.cuda.empty_cache()
-    #         gc.collect()
-    #
-    #     return all_smiles
-
-    # def sample(self, n, batch_size=100, prefix="", output_csv="output2.csv"):
-    #     """
-    #     Generate `n` molecules in batches and return SMILES strings.
-    #
-    #     Args:
-    #         n (int): Total number of molecules to generate.
-    #         batch_size (int): Number of molecules per batch.
-    #         prefix (str): Starting SELFIES tokens (space-separated).
-    #         output_csv (str or None): Path to write outputs (optional).
-    #
-    #     Returns:
-    #         List[str]: List of generated SMILES strings.
-    #     """
-    #     if not prefix.strip():
-    #         print("⚠️ Empty prefix provided. Using default '<s>'.")
-    #         prefix = "<s>"
-    #
-    #     tokens = prefix.strip().split()
-    #     input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
-    #     input_tensor = torch.tensor([input_ids], device=self.device)
-    #
-    #     total_generated = 0
-    #     all_selfies = []
-    #
-    #     while total_generated < n:
-    #         current_batch_size = min(batch_size, n - total_generated)
-    #
-    #         with torch.no_grad():
-    #             output_ids = self.model.generate(
-    #                 input_ids=input_tensor.expand(current_batch_size, -1),
-    #                 max_length=22,
-    #                 num_return_sequences=current_batch_size,
-    #                 do_sample=True,
-    #                 temperature=1.5,
-    #                 top_k=30,
-    #                 top_p=0.9,
-    #                 repetition_penalty=1.1,
-    #             )
-    #
-    #         selfies_list = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-    #
-    #         # ✅ Apply token cleanup if needed
-    #         mapped_selfies_list = [apply_selfies_token_mapping(s) for s in selfies_list]
-    #
-    #         # ✅ Convert SELFIES to valid SMILES
-    #         # smiles_list = self.selfies_to_smiles(mapped_selfies_list)
-    #         # all_smiles.extend(smiles_list)
-    #
-    #         all_selfies.extend(selfies_list)
-    #         # ✅ Save to file if requested
-    #         if output_csv:
-    #             with open(output_csv, "a") as f:
-    #                 for s in mapped_selfies_list:
-    #                     f.write(f"{s},True,Novel\n")
-    #
-    #         total_generated += current_batch_size
-    #         torch.cuda.empty_cache()
-    #         gc.collect()
-    #
-    #     return all_selfies
-    #
-    #     # return all_smiles
-
-    # def sample(self, n, batch_size=100, prefix="", output_csv="output2.csv"):
-    #     """
-    #     Generate `n` molecules in batches and return SMILES strings.
-    #
-    #     Args:
-    #         n (int): Total number of molecules to generate.
-    #         batch_size (int): Number of molecules per batch.
-    #         prefix (str): Starting SELFIES tokens (space-separated).
-    #         output_csv (str or None): Path to write outputs (optional).
-    #
-    #     Returns:
-    #         List[str]: List of generated SMILES strings.
-    #     """
-    #     if not prefix.strip():
-    #         print("⚠️ Empty prefix provided. Using default '<s>'.")
-    #         prefix = "<s>"
-    #
-    #     tokens = prefix.strip().split()
-    #     input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
-    #     input_tensor = torch.tensor([input_ids], device=self.device)
-    #
-    #     total_generated = 0
-    #     all_selfies = []
-    #
-    #     while total_generated < n:
-    #         current_batch_size = min(batch_size, n - total_generated)
-    #
-    #         with torch.no_grad():
-    #             output_ids = self.model.generate(
-    #                 input_ids=input_tensor.expand(current_batch_size, -1),
-    #                 max_length=63,
-    #                 num_return_sequences=current_batch_size,
-    #                 do_sample=True,
-    #                 temperature=1.5,
-    #                 top_k=30,
-    #                 top_p=0.9,
-    #                 repetition_penalty=1.1,
-    #             )
-    #
-    #         selfies_list = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-    #
-    #         # ✅ Apply token cleanup if needed
-    #         # mapped_selfies_list = [apply_selfies_token_mapping(s) for s in selfies_list]
-    #
-    #         # ✅ Convert SELFIES to valid SMILES
-    #         # smiles_list = self.selfies_to_smiles(mapped_selfies_list)
-    #         # all_smiles.extend(smiles_list)
-    #
-    #
-    #         # all_selfies_list = []
-    #         # for molecules in all_selfies:
-    #         #     all_selfies.append(molecules.replace(" ", ""))
-    #
-    #         all_selfies_list = []
-    #         for molecules in selfies_list:
-    #             all_selfies_list.append(molecules.replace(" ", ""))
-    #
-    #         # all_selfies.extend(selfies_list)
-    #         all_selfies.extend(all_selfies_list)
-    #
-    #         # TODO: 08/01/25 16:45 pm: ALSO CONSIDER DOING MAPPED SELFIES HERE!
-    #
-    #         # # ✅ Save to file if requested
-    #         # if output_csv:
-    #         #     with open(output_csv, "a") as f:
-    #         #         for s in selfies_list:
-    #         #             f.write(f"{s},True,Novel\n")
-    #
-    #         # ✅ Save to file if requested
-    #         if output_csv:
-    #             with open(output_csv, "a") as f:
-    #                 for s in all_selfies:
-    #                     f.write(f"{s},True,Novel\n")
-    #
-    #         total_generated += current_batch_size
-    #         torch.cuda.empty_cache()
-    #         gc.collect()
-    #
-    #     return all_selfies
-    #
-    #     # return all_smiles
-    #
-
-    # def sample(self, n, batch_size=100, prefix="", output_csv="output2.csv"):
     def sample(
         self,
         n: int,
@@ -625,6 +271,14 @@ class HuggingFaceMoleculeGenerator:
         if self.forbidden_token_ids:
             processors.append(MaskTokensLogitsProcessor(self.forbidden_token_ids))
 
+
+
+        # ↓↓↓ NEW: softly bias toward chosen scaffolds
+        if self.scaffold_bias_map:
+            processors.append(SequenceBiasLogitsProcessor(self.scaffold_bias_map))
+
+
+
         total_generated = 0
         # all_selfies = []
         all_selfies: List[str] = []
@@ -645,9 +299,24 @@ class HuggingFaceMoleculeGenerator:
                 #     eos_token_id=self.tokenizer.eos_token_id,
                 #     pad_token_id=self.tokenizer.pad_token_id
                 # )
+                # output_ids = self.model.generate(
+                #     input_ids=input_tensor.expand(current_batch_size, -1),
+                #     max_length=63,
+                #     num_return_sequences=current_batch_size,
+                #     do_sample=True,
+                #     temperature=1.5,
+                #     top_k=30,
+                #     top_p=0.9,
+                #     repetition_penalty=1.1,
+                #     logits_processor=processors,
+                #     eos_token_id=self.tokenizer.eos_token_id,
+                #     pad_token_id=self.tokenizer.pad_token_id,
+                #     # new: ensure at least 4 tokens are generated past the prompt
+                #     min_new_tokens=4,
+                # )
                 output_ids = self.model.generate(
                     input_ids=input_tensor.expand(current_batch_size, -1),
-                    max_length=63,
+                    max_length=90,
                     num_return_sequences=current_batch_size,
                     do_sample=True,
                     temperature=1.5,
@@ -1016,19 +685,55 @@ if __name__ == "__main__":
     #     ".",
     # ]
     forbidden: List[str] = [
-        # Some ions not present in finetuning dataset
+        # Some ions not present in finetuning dataset or in common HIV-1 integrase drugs
         "[Ag-4]",
         "[Rb+1]",
         "[Sn+3]",
+        "[P]",
+        "[=P]",
+        "[P@]",
+        "[P@@]",
+        "[P+1]",
+        "[=P+1]",
+        "[/P+1]",
+        "[/P]",
+        "[\PH1]",
+        "[P@H1]",
+        "[P@@H1]",
         # Removed additional "." character
         ".",
     ]
+
+    # Define desired SELFIES scaffolds as token lists (space-delimited tokens in your tokenizer)
+    scaffolds = [
+        # β-diketo acid (DKA)
+        ["[C]", "[C]", "[=Branch1]", "[C]", "[=O]", "[C]", "[C]", "[=Branch1]", "[C]", "[=O]", "[O]"],
+        # “naphthyridine carboxamide–like” → use a simple pyridine carboxamide (nicotinamide)
+        ["[N]", "[C]", "[=Branch1]", "[C]", "[=O]", "[C]", "[=C]", "[C]", "[=C]", "[C]", "[=N]", "[Ring1]", "[=Branch1]"],
+        # quinolinone carboxylate–like → 2-pyridone-3-carboxylic acid (lactam form)
+        ["[O]", "[=C]", "[Branch1]", "[C]", "[O]", "[C]", "[=C]", "[C]", "[=C]", "[NH1]", "[C]", "[Ring1]", "[=Branch1]", "[=O]"],
+        # pyridinone (raltegravir-like minimal) → 2-pyridone (lactam form)
+        ["[O]", "[=C]", "[C]", "[=C]", "[C]", "[=C]", "[NH1]", "[Ring1]", "[=Branch1]"],
+        # diarylpyrimidinone (elvitegravir-like minimal) → 2-pyrimidinone (lactam)
+        ["[O]", "[=C]", "[C]", "[=C]", "[N]", "[=C]", "[NH1]", "[Ring1]", "[=Branch1]"],
+        # carbamoyl-pyridone (second-gen minimal) → 2-pyridone-3-carboxamide (lactam)
+        ["[N]", "[C]", "[=Branch1]", "[C]", "[=O]", "[C]", "[=C]", "[C]", "[=C]", "[NH1]", "[C]", "[Ring1]", "[=Branch1]", "[=O]"],
+    ]
+
+    # gen = HuggingFaceMoleculeGenerator(
+    #     model_path="./runs/selfies_BART_finetune_model_small_adamw_earlyS_6_long_3x/model",
+    #     tokenizer_path="full_tokenizer_finetune_and_pretrain",
+    #     device="cuda" if torch.cuda.is_available() else "cpu",
+    #     forbidden_tokens=forbidden,
+    # )
 
     gen = HuggingFaceMoleculeGenerator(
         model_path="./runs/selfies_BART_finetune_model_small_adamw_earlyS_6_long_3x/model",
         tokenizer_path="full_tokenizer_finetune_and_pretrain",
         device="cuda" if torch.cuda.is_available() else "cpu",
         forbidden_tokens=forbidden,
+        scaffold_sequences=scaffolds,
+        scaffold_bias=4.0,  # try 2–6; increase to strengthen the bias
     )
 
     start_time = time.time()
