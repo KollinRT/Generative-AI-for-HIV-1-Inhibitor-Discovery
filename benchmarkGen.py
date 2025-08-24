@@ -686,6 +686,7 @@ if __name__ == "__main__":
     #     # Removed additional "." character
     #     ".",
     # ]
+    # fmt: off
     forbidden: List[str] = [
         # Some ions not present in finetuning dataset or in common HIV-1 integrase drugs
         "[Ag-4]",
@@ -702,81 +703,48 @@ if __name__ == "__main__":
         "[\PH1]",
         "[P@H1]",
         "[P@@H1]",
+        # Block some halogens
+        "[Br-1]",
+        "[Br]",
+        "[Br+1]",
+        "[Br+2]",
+        "[I]",
+        "[I+2]",
+        # Block some heavy metals and isotopes
+        "[=Te]",
+        "[13CH3]",
+        "[14C]",
+        "[14CH2]",
+        "[#14C]",
+        "[15N]",
+        "[17F]",
+        "[18OH1]",
+        "[Se-1]",
+        "[/As]",
+        "[Bi+3]",
+        "[32P]",
         # Removed additional "." character
         ".",
     ]
+    # fmt: on
 
+    # fmt: off
     # Define desired SELFIES scaffolds as token lists (space-delimited tokens in your tokenizer)
     scaffolds = [
         # β-diketo acid (DKA)
-        [
-            "[C]",
-            "[C]",
-            "[=Branch1]",
-            "[C]",
-            "[=O]",
-            "[C]",
-            "[C]",
-            "[=Branch1]",
-            "[C]",
-            "[=O]",
-            "[O]",
-        ],
+        ["[C]","[C]","[=Branch1]","[C]","[=O]","[C]","[C]","[=Branch1]","[C]","[=O]","[O]"],
         # “naphthyridine carboxamide–like” → use a simple pyridine carboxamide (nicotinamide)
-        [
-            "[N]",
-            "[C]",
-            "[=Branch1]",
-            "[C]",
-            "[=O]",
-            "[C]",
-            "[=C]",
-            "[C]",
-            "[=C]",
-            "[C]",
-            "[=N]",
-            "[Ring1]",
-            "[=Branch1]",
-        ],
+        ["[N]","[C]","[=Branch1]","[C]","[=O]","[C]","[=C]","[C]","[=C]","[C]","[=N]","[Ring1]","[=Branch1]"],
         # quinolinone carboxylate–like → 2-pyridone-3-carboxylic acid (lactam form)
-        [
-            "[O]",
-            "[=C]",
-            "[Branch1]",
-            "[C]",
-            "[O]",
-            "[C]",
-            "[=C]",
-            "[C]",
-            "[=C]",
-            "[NH1]",
-            "[C]",
-            "[Ring1]",
-            "[=Branch1]",
-            "[=O]",
-        ],
+        ["[O]","[=C]","[Branch1]","[C]","[O]","[C]","[=C]","[C]","[=C]","[NH1]","[C]","[Ring1]","[=Branch1]","[=O]"],
         # pyridinone (raltegravir-like minimal) → 2-pyridone (lactam form)
         ["[O]", "[=C]", "[C]", "[=C]", "[C]", "[=C]", "[NH1]", "[Ring1]", "[=Branch1]"],
         # diarylpyrimidinone (elvitegravir-like minimal) → 2-pyrimidinone (lactam)
         ["[O]", "[=C]", "[C]", "[=C]", "[N]", "[=C]", "[NH1]", "[Ring1]", "[=Branch1]"],
         # carbamoyl-pyridone (second-gen minimal) → 2-pyridone-3-carboxamide (lactam)
-        [
-            "[N]",
-            "[C]",
-            "[=Branch1]",
-            "[C]",
-            "[=O]",
-            "[C]",
-            "[=C]",
-            "[C]",
-            "[=C]",
-            "[NH1]",
-            "[C]",
-            "[Ring1]",
-            "[=Branch1]",
-            "[=O]",
-        ],
+        ["[N]","[C]","[=Branch1]","[C]","[=O]","[C]","[=C]","[C]","[=C]","[NH1]","[C]","[Ring1]","[=Branch1]","[=O]"],
     ]
+    # fmt: on
 
     # gen = HuggingFaceMoleculeGenerator(
     #     model_path="./runs/selfies_BART_finetune_model_small_adamw_earlyS_6_long_3x/model",
