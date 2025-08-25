@@ -690,38 +690,38 @@ if __name__ == "__main__":
     forbidden: List[str] = [
         # Some ions not present in finetuning dataset or in common HIV-1 integrase drugs
         "[Ag-4]",
+        "[Ag]",
+        "[Ag+1]",
+        "[He]",
         "[Rb+1]",
         "[Sn+3]",
-        "[P]",
-        "[=P]",
-        "[P@]",
-        "[P@@]",
-        "[P+1]",
-        "[=P+1]",
-        "[/P+1]",
-        "[/P]",
-        "[\PH1]",
-        "[P@H1]",
-        "[P@@H1]",
+        # Phosphorus
+        "[P]", "[=P]", "[P@]", "[P@@]", "[P-1]", "[P+1]", "[=P+1]", "[/P+1]", "[/P]",
+        "[\PH1]", "[P@H1]", "[P@@H1]", "[P@@+1]",
         # Block some halogens
         "[Br-1]",
         "[Br]",
         "[Br+1]",
         "[Br+2]",
+        "[/Br]", "[\Br]",
+        "[I-1]",
         "[I]",
         "[I+1]",
         "[I+2]",
         "[\\I]",
+        "[/I]",
         "[I+3]",
+        # # Chlorides
+        "[Cl-1]", "[Cl+1]", "[Cl+2]", "[Cl+3]",
         # Block some heavy metals and isotopes
         "[OH0]",
         "[2H]",
         "[3H]",
-        "[Te-1]",
-        "[Te]",
-        "[=Te]",
-        "[TeH1]",
+        # Tellurium
+        "[Te-1]", "[Te]","[=Te]","[TeH1]","[TeH2]",
+        # End tellurium
         "[11C]",
+        "[=11C]",
         "[11CH1]",
         "[11CH2]",
         "[11CH3]",
@@ -747,15 +747,17 @@ if __name__ == "__main__":
         "[15N]",
         "[15NH1]",
         "[=17O]",
+        "[O+1]", "[OH1+1]","[O-1]", "[OH1-1]",
         "[17F]",
         "[18F]",
         "[18FH1]",
         "[19F]",
         "[18OH1]",
-        "[Se-1]",
         "[/As]",
+        # Bismuth
         "[Bi]",
         "[Bi+3]",
+        # End Bismuth
         "[32P]",
         "[=32PH1]",
         "[35S]",
@@ -770,6 +772,25 @@ if __name__ == "__main__":
         "[131I]",
         "[/131I]",
         "[135I]",
+        # Silicon
+        "[Si]", "[/Si]", "[\Si]", "[Si-1]", "[SiH1]", "[SiH2]", "[SiH3]", "[SiH3-1]", "[SiH4]",
+        # Tin
+        "[Sn]", "[/Sn]", "[Sn+1]", "[Sn+2]", "[Sn+3]", "[SnH1]", "[SnH2]", "[SnH4+2]", "[SnH6+3]", "[Sn@@H1]",
+        # Zinc
+        "[Zn]", "[Zn+1]", "[Zn+2]", "[Zn-2]",
+        # Column 1 Metals
+        "[Na]", "[Na+1]", "[Li]", "[Li+1]", "[LiH1]", "[K+1]", "[KH1]", "[Rb+1]", "[Cs+1]",
+        # Column 2 Metals
+        "[Mg]", "[Mg+2]", "[MgH2]", "[Ca+2]", "[CaH2]", "[Sr+2]", "[Ba+2]",
+        # Selenium
+        "[Se]", "[Se+1]", "[Se-1]", "[Se-2]", "[/Se]", "[\Se]", "[/SeH1]", "[\SeH1]", "[SeH1]", "[SeH2]", "[73Se]",
+        # Charged Oddities
+        "[H+1]", "[H-1]", "[HH1]",
+        "[CH0]", "[OH0]", "[NH0]",
+        "[C+1]", "[C-1]", "[#C-1]",
+        # Sulfurs
+        "[S+1]", "[S-1]", "[S-2]", "[=S-1]", "[S@+1]", "[S@@+1]", "[/S+1]", "[\S+1]", "[/S-1]",
+
         # Removed additional "." character
         ".",
     ]
