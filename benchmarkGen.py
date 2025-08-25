@@ -318,7 +318,7 @@ class HuggingFaceMoleculeGenerator:
                 # )
                 output_ids = self.model.generate(
                     input_ids=input_tensor.expand(current_batch_size, -1),
-                    max_length=90,
+                    max_length=63,
                     num_return_sequences=current_batch_size,
                     do_sample=True,
                     temperature=1.5,
