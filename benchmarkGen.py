@@ -30,6 +30,13 @@ from pybloom_live import ScalableBloomFilter
 
 from utils import MaskTokensLogitsProcessor
 
+from utils_constraints import (
+    MonovalentHalogenProcessor,
+    NitreniumBranchCapProcessor,
+    RingBalanceProcessor,
+)
+
+
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
@@ -262,22 +269,30 @@ class HuggingFaceMoleculeGenerator:
         output_csv: Optional[str] = "output2.csv",
     ) -> List[str]:
         if not prefix.strip():
-            print("⚠️ Empty prefix provided. Using default '<s>'.")
-            prefix = "<s>"
+            if self.tokenizer.bos_token_id is not None:
+                input_ids = [[self.tokenizer.bos_token_id]]
+            else:
+                input_ids = [[]]
+        else:
+            tokens = prefix.strip().split()
+            input_ids = [self.tokenizer.convert_tokens_to_ids(tokens)]
 
-        tokens = prefix.strip().split()
-        input_ids = self.tokenizer.convert_tokens_to_ids(tokens)
-        input_tensor = torch.tensor([input_ids], device=self.device)
+        input_tensor = torch.tensor(input_ids, device=self.device)
 
         # Build logits processors
         processors = LogitsProcessorList()
         # (optional) don’t stop too early
         # processors.append(MinLengthLogitsProcessor(min_length=4, eos_token_id=self.tokenizer.eos_token_id))
-        # hard-mask forbidden tokens
+        # 1) hard mask forbidden tokens (yours)
         if self.forbidden_token_ids:
             processors.append(MaskTokensLogitsProcessor(self.forbidden_token_ids))
 
-        # ↓↓↓ NEW: softly bias toward chosen scaffolds
+        # 2) chemistry-aware local constraints
+        processors.append(MonovalentHalogenProcessor(self.tokenizer))
+        processors.append(NitreniumBranchCapProcessor(self.tokenizer))
+        processors.append(RingBalanceProcessor(self.tokenizer, max_open=2))
+
+        # 3) (optional) scaffold bias
         if self.scaffold_bias_map:
             processors.append(SequenceBiasLogitsProcessor(self.scaffold_bias_map))
 
@@ -316,31 +331,65 @@ class HuggingFaceMoleculeGenerator:
                 #     # new: ensure at least 4 tokens are generated past the prompt
                 #     min_new_tokens=4,
                 # )
+                # output_ids = self.model.generate(
+                #     input_ids=input_tensor.expand(current_batch_size, -1),
+                #     max_length=63,
+                #     num_return_sequences=current_batch_size,
+                #     do_sample=True,
+                #     temperature=1.5,
+                #     top_k=30,
+                #     top_p=0.9,
+                #     repetition_penalty=1.1,
+                #     logits_processor=processors,
+                #     eos_token_id=self.tokenizer.eos_token_id,
+                #     pad_token_id=self.tokenizer.pad_token_id,
+                #     # new: ensure at least 4 tokens are generated past the prompt
+                #     min_new_tokens=4,
+                # )
+
                 output_ids = self.model.generate(
                     input_ids=input_tensor.expand(current_batch_size, -1),
-                    max_length=63,
-                    num_return_sequences=current_batch_size,
+                    max_length=64,  # small bump
+                    min_new_tokens=6,  # give it a little room
                     do_sample=True,
-                    temperature=1.5,
-                    top_k=30,
-                    top_p=0.9,
-                    repetition_penalty=1.1,
+                    temperature=1.0,  # 1.0–1.2 with masks tends to be stable
+                    top_k=50,
+                    top_p=0.92,
+                    repetition_penalty=1.15,
                     logits_processor=processors,
                     eos_token_id=self.tokenizer.eos_token_id,
                     pad_token_id=self.tokenizer.pad_token_id,
-                    # new: ensure at least 4 tokens are generated past the prompt
-                    min_new_tokens=4,
                 )
 
             selfies_list = self.tokenizer.batch_decode(
                 output_ids, skip_special_tokens=True
             )
-            all_selfies.extend(s.replace(" ", "") for s in selfies_list)
 
+            # ✅ Quick validity filter (SELFIES → SMILES → RDKit)
+            valid_selfies = []
+            for s in selfies_list:
+                ss = s.replace(" ", "")  # SELFIES needs no spaces
+                try:
+                    smi = sf.decoder(ss)  # SELFIES → SMILES
+                    if Chem.MolFromSmiles(smi):  # RDKit validity check
+                        valid_selfies.append(ss)  # keep the SELFIES string
+                except Exception:
+                    pass
+
+            # all_selfies.extend(s.replace(" ", "") for s in selfies_list)
+            #
+            # if output_csv:
+            #     with open(output_csv, "a") as f:
+            #         for s in selfies_list:
+            #             f.write(f"{s},True,Novel\n")
+            # Use only the validated SELFIES from this batch
+            all_selfies.extend(valid_selfies)
+
+            # Optional: write only valid rows
             if output_csv:
                 with open(output_csv, "a") as f:
-                    for s in selfies_list:
-                        f.write(f"{s},True,Novel\n")
+                    for ss in valid_selfies:
+                        f.write(f"{ss},True,Novel\n")
 
             total_generated += current_batch_size
             torch.cuda.empty_cache()
@@ -490,6 +539,14 @@ def benchmark_generated_molecules_selfies_parquet(
     return results
 
 
+def estimate_rows(parquet_path: str, column="selfies", sample_parts=4) -> int:
+    df = dd.read_parquet(parquet_path, columns=[column])
+    nparts = len(df.partitions)
+    sample = df.partitions[:max(1, min(sample_parts, nparts))][column].count().compute()
+    est = int(sample * nparts / max(1, sample_parts))
+    return max(est, 1_000_000)
+
+
 def benchmark_generated_molecules_selfies_parquet_bloom(
     gen,
     selfies_pt,
@@ -512,9 +569,10 @@ def benchmark_generated_molecules_selfies_parquet_bloom(
         )
     elif isinstance(selfies_pt, pd.DataFrame):
         selfies_series = selfies_pt["selfies"].dropna().astype(str)
-        bloom_filter = ScalableBloomFilter(
-            initial_capacity=1_000_000_000, error_rate=bloom_error_rate
-        )
+
+        cap = estimate_rows(selfies_pt)
+        bloom_filter = ScalableBloomFilter(initial_capacity=cap, error_rate=bloom_error_rate)
+
         for s in selfies_series:
             bloom_filter.add(s)
     else:
@@ -687,112 +745,132 @@ if __name__ == "__main__":
     #     ".",
     # ]
     # fmt: off
-    forbidden: List[str] = [
-        # Some ions not present in finetuning dataset or in common HIV-1 integrase drugs
-        "[Ag-4]",
-        "[Ag]",
-        "[Ag+1]",
-        "[He]",
-        "[Rb+1]",
-        "[Sn+3]",
-        # Phosphorus
-        "[P]", "[=P]", "[P@]", "[P@@]", "[P-1]", "[P+1]", "[=P+1]", "[/P+1]", "[/P]",
-        "[\PH1]", "[P@H1]", "[P@@H1]", "[P@@+1]",
-        # Block some halogens
-        "[Br-1]",
-        "[Br]",
-        "[Br+1]",
-        "[Br+2]",
-        "[/Br]", "[\Br]",
-        "[I-1]",
-        "[I]",
-        "[I+1]",
-        "[I+2]",
-        "[\\I]",
-        "[/I]",
-        "[I+3]",
-        # # Chlorides
-        "[Cl-1]", "[Cl+1]", "[Cl+2]", "[Cl+3]",
-        # Block some heavy metals and isotopes
-        "[OH0]",
-        "[2H]",
-        "[3H]",
-        # Tellurium
-        "[Te-1]", "[Te]","[=Te]","[TeH1]","[TeH2]",
-        # End tellurium
-        "[11C]",
-        "[=11C]",
-        "[11CH1]",
-        "[11CH2]",
-        "[11CH3]",
-        "[\\11CH3]",
-        "[=13CH1]",
-        "[13CH2]",
-        "[13CH3]",
-        "[13C]",
-        "[/13C]",
-        "[=13C]",
-        "[/13CH1]",
-        "[13CH1]",
-        "[14C]",
-        "[/14C]",
-        "[14C@@]",
-        "[/14CH1]",
-        "[14C@H1]",
-        "[14C@@H1]",
-        "[=14C]",
-        "[14CH2]",
-        "[14CH3]",
-        "[#14C]",
-        "[15N]",
-        "[15NH1]",
-        "[=17O]",
-        "[O+1]", "[OH1+1]","[O-1]", "[OH1-1]",
-        "[17F]",
-        "[18F]",
-        "[18FH1]",
-        "[19F]",
-        "[18OH1]",
-        "[/As]",
-        # Bismuth
-        "[Bi]",
-        "[Bi+3]",
-        # End Bismuth
-        "[32P]",
-        "[=32PH1]",
-        "[35S]",
-        "[/123I]",
-        "[123I-1]",
-        "[123IH1]",
-        "[123Te]",
-        "[124I]","[13CH2]"
-        "[125I]",
-        "[/125I]",
-        "[\\125I]",
-        "[131I]",
-        "[/131I]",
-        "[135I]",
-        # Silicon
-        "[Si]", "[/Si]", "[\Si]", "[Si-1]", "[SiH1]", "[SiH2]", "[SiH3]", "[SiH3-1]", "[SiH4]",
-        # Tin
-        "[Sn]", "[/Sn]", "[Sn+1]", "[Sn+2]", "[Sn+3]", "[SnH1]", "[SnH2]", "[SnH4+2]", "[SnH6+3]", "[Sn@@H1]",
-        # Zinc
+    # forbidden: List[str] = [
+    #     # Some ions not present in finetuning dataset or in common HIV-1 integrase drugs
+    #     "[Ag-4]",
+    #     "[Ag]",
+    #     "[Ag+1]",
+    #     "[He]",
+    #     "[Rb+1]",
+    #     "[Sn+3]",
+    #     # Phosphorus
+    #     "[P]", "[=P]", "[P@]", "[P@@]", "[P-1]", "[P+1]", "[=P+1]", "[/P+1]", "[/P]",
+    #     "[\PH1]", "[P@H1]", "[P@@H1]", "[P@@+1]",
+    #     # Block some halogens
+    #     "[Br-1]",
+    #     "[Br]",
+    #     "[Br+1]",
+    #     "[Br+2]",
+    #     "[/Br]", "[\Br]",
+    #     "[I-1]",
+    #     "[I]",
+    #     "[I+1]",
+    #     "[I+2]",
+    #     "[\\I]",
+    #     "[/I]",
+    #     "[I+3]",
+    #     # # Chlorides
+    #     "[Cl-1]", "[Cl+1]", "[Cl+2]", "[Cl+3]",
+    #     # Block some heavy metals and isotopes
+    #     "[OH0]",
+    #     "[2H]",
+    #     "[3H]",
+    #     # Tellurium
+    #     "[Te-1]", "[Te]","[=Te]","[TeH1]","[TeH2]",
+    #     # End tellurium
+    #     "[11C]",
+    #     "[=11C]",
+    #     "[11CH1]",
+    #     "[11CH2]",
+    #     "[11CH3]",
+    #     "[\\11CH3]",
+    #     "[=13CH1]",
+    #     "[13CH2]",
+    #     "[13CH3]",
+    #     "[13C]",
+    #     "[/13C]",
+    #     "[=13C]",
+    #     "[/13CH1]",
+    #     "[13CH1]",
+    #     "[14C]",
+    #     "[/14C]",
+    #     "[14C@@]",
+    #     "[/14CH1]",
+    #     "[14C@H1]",
+    #     "[14C@@H1]",
+    #     "[=14C]",
+    #     "[14CH2]",
+    #     "[14CH3]",
+    #     "[#14C]",
+    #     "[15N]",
+    #     "[15NH1]",
+    #     "[=17O]",
+    #     "[O+1]", "[OH1+1]","[O-1]", "[OH1-1]",
+    #     "[17F]",
+    #     "[18F]",
+    #     "[18FH1]",
+    #     "[19F]",
+    #     "[18OH1]",
+    #     "[/As]",
+    #     # Bismuth
+    #     "[Bi]",
+    #     "[Bi+3]",
+    #     # End Bismuth
+    #     "[32P]",
+    #     "[=32PH1]",
+    #     "[35S]",
+    #     "[/123I]",
+    #     "[123I-1]",
+    #     "[123IH1]",
+    #     "[123Te]",
+    #     "[124I]","[13CH2]"
+    #     "[125I]",
+    #     "[/125I]",
+    #     "[\\125I]",
+    #     "[131I]",
+    #     "[/131I]",
+    #     "[135I]",
+    #     # Silicon
+    #     "[Si]", "[/Si]", "[\Si]", "[Si-1]", "[SiH1]", "[SiH2]", "[SiH3]", "[SiH3-1]", "[SiH4]",
+    #     # Tin
+    #     "[Sn]", "[/Sn]", "[Sn+1]", "[Sn+2]", "[Sn+3]", "[SnH1]", "[SnH2]", "[SnH4+2]", "[SnH6+3]", "[Sn@@H1]",
+    #     # Zinc
+    #     "[Zn]", "[Zn+1]", "[Zn+2]", "[Zn-2]",
+    #     # Column 1 Metals
+    #     "[Na]", "[Na+1]", "[Li]", "[Li+1]", "[LiH1]", "[K+1]", "[KH1]", "[Rb+1]", "[Cs+1]",
+    #     # Column 2 Metals
+    #     "[Mg]", "[Mg+2]", "[MgH2]", "[Ca+2]", "[CaH2]", "[Sr+2]", "[Ba+2]",
+    #     # Selenium
+    #     "[Se]", "[Se+1]", "[Se-1]", "[Se-2]", "[/Se]", "[\Se]", "[/SeH1]", "[\SeH1]", "[SeH1]", "[SeH2]", "[73Se]",
+    #     # Charged Oddities
+    #     "[H+1]", "[H-1]", "[HH1]",
+    #     "[CH0]", "[OH0]", "[NH0]",
+    #     "[C+1]", "[C-1]", "[#C-1]",
+    #     # Sulfurs
+    #     "[S+1]", "[S-1]", "[S-2]", "[=S-1]", "[S@+1]", "[S@@+1]", "[/S+1]", "[\S+1]", "[/S-1]",
+    #
+    #     # Removed additional "." character
+    #     ".",
+    # ]
+    forbidden = [
+        ".", "<unk>",  # any sentinel you don’t use
+        # exotic/radioisotopes
+        "[11C]", "[11CH1]", "[11CH2]", "[11CH3]", "[=11C]",
+        "[13C]", "[13CH1]", "[13CH2]", "[13CH3]", "[=13C]", "[/13C]", "[/13CH1]",
+        "[14C]", "[14CH1]", "[14CH2]", "[14CH3]", "[=14C]", "[14C@H1]", "[14C@@H1]", "[14C@@]", "[/14C]", "[/14CH1]",
+        "#14C",
+        "[18F]", "[18FH1]", "[19F]", "[17F]",
+        "[125I]", "[131I]", "[123I]", "[123I-1]", "[135I]", "[/125I]", "[\\125I]", "[/131I]", "[/123I]",
+        # heavy metals (if not in data)
+        "[Ag]", "[Ag+1]", "[Ag-4]",
+        "[Bi]", "[Bi+3]",
+        "[Sn]", "[Sn+1]", "[Sn+2]", "[Sn+3]", "[SnH1]", "[SnH2]", "[SnH4+2]", "[SnH6+3]", "[Sn@@H1]", "[/Sn]",
         "[Zn]", "[Zn+1]", "[Zn+2]", "[Zn-2]",
-        # Column 1 Metals
-        "[Na]", "[Na+1]", "[Li]", "[Li+1]", "[LiH1]", "[K+1]", "[KH1]", "[Rb+1]", "[Cs+1]",
-        # Column 2 Metals
-        "[Mg]", "[Mg+2]", "[MgH2]", "[Ca+2]", "[CaH2]", "[Sr+2]", "[Ba+2]",
-        # Selenium
-        "[Se]", "[Se+1]", "[Se-1]", "[Se-2]", "[/Se]", "[\Se]", "[/SeH1]", "[\SeH1]", "[SeH1]", "[SeH2]", "[73Se]",
-        # Charged Oddities
-        "[H+1]", "[H-1]", "[HH1]",
-        "[CH0]", "[OH0]", "[NH0]",
-        "[C+1]", "[C-1]", "[#C-1]",
-        # Sulfurs
-        "[S+1]", "[S-1]", "[S-2]", "[=S-1]", "[S@+1]", "[S@@+1]", "[/S+1]", "[\S+1]", "[/S-1]",
-
-        # Removed additional "." character
-        ".",
+        # alkali/alkaline earth if absent in training
+        "[Na]", "[Na+1]", "[Li]", "[Li+1]", "[K+1]", "[Rb+1]", "[Cs+1]", "[Mg]", "[Mg+2]", "[Ca+2]", "[Sr+2]", "[Ba+2]",
+        # tellurium/selenium (if absent)
+        "[Te]", "[Te-1]", "[TeH1]", "[TeH2]",
+        "[Se]", "[Se+1]", "[Se-1]", "[Se-2]", "[/Se]", "[\\Se]", "[/SeH1]", "[\\SeH1]", "[SeH1]", "[SeH2]", "[73Se]",
     ]
     # fmt: on
 
