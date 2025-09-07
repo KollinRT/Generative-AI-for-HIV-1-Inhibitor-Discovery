@@ -542,7 +542,9 @@ def benchmark_generated_molecules_selfies_parquet(
 def estimate_rows(parquet_path: str, column="selfies", sample_parts=4) -> int:
     df = dd.read_parquet(parquet_path, columns=[column])
     nparts = len(df.partitions)
-    sample = df.partitions[:max(1, min(sample_parts, nparts))][column].count().compute()
+    sample = (
+        df.partitions[: max(1, min(sample_parts, nparts))][column].count().compute()
+    )
     est = int(sample * nparts / max(1, sample_parts))
     return max(est, 1_000_000)
 
@@ -571,7 +573,9 @@ def benchmark_generated_molecules_selfies_parquet_bloom(
         selfies_series = selfies_pt["selfies"].dropna().astype(str)
 
         cap = estimate_rows(selfies_pt)
-        bloom_filter = ScalableBloomFilter(initial_capacity=cap, error_rate=bloom_error_rate)
+        bloom_filter = ScalableBloomFilter(
+            initial_capacity=cap, error_rate=bloom_error_rate
+        )
 
         for s in selfies_series:
             bloom_filter.add(s)
