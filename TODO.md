@@ -48,3 +48,8 @@ code is the correct two then filtered to less than 64 tokens
 - Then I can compare them.... print all three for the best model... Do I plot the 1lay, 3lay, 6lay all in a 3x2? So 6 figures per page and each does the thing? This shows the importance of layer freezing that I can justify to my committee.
 - Figure out if `dropout` is important to include in the hyperparams.yaml file thingy....
 - Figure out where the visualization script is!
+
+
+11/09/25
+- `uv add pymysql` was missing for the pymysql for `getDataForPretrain.py`. Will need to be updated in the `Dockerfile`.
+- Gotta get the download ChEMBL script on...

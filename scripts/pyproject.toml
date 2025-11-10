@@ -38,6 +38,7 @@ dependencies = [
     "py3dmol==2.5.2",
     "pyarrow==20.0.0",
     "pybloom-live==4.0.0",
+    "pymysql>=1.1.2",
     "pytorch-lamb==1.0.0",
     "pytorch-ranger==0.1.1",
     "rdkit==2025.3.2",
