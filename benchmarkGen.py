@@ -217,11 +217,10 @@ class HuggingFaceMoleculeGenerator:
         ids_from_strings: List[Optional[int]] = []
         if forbidden_tokens:
             ids_from_strings = self.tokenizer.convert_tokens_to_ids(forbidden_tokens)
-        cleaned_from_strings: List[int] = [
-            i
-            for i in ids_from_strings
-            if i is not None and i != self.tokenizer.unk_token_id
-        ]
+        cleaned_from_strings: List[int] = \
+            [
+            i for i in ids_from_strings if i is not None and i != self.tokenizer.unk_token_id
+            ]
         self.forbidden_token_ids: Set[int] = set((forbidden_token_ids or [])) | set(
             cleaned_from_strings
         )
@@ -376,20 +375,20 @@ class HuggingFaceMoleculeGenerator:
                 except Exception:
                     pass
 
-            # all_selfies.extend(s.replace(" ", "") for s in selfies_list)
-            #
-            # if output_csv:
-            #     with open(output_csv, "a") as f:
-            #         for s in selfies_list:
-            #             f.write(f"{s},True,Novel\n")
+            all_selfies.extend(s.replace(" ", "") for s in selfies_list)
+
+            if output_csv:
+                with open(output_csv, "a") as f:
+                    for s in selfies_list:
+                        f.write(f"{s},True,Novel\n")
             # Use only the validated SELFIES from this batch
             all_selfies.extend(valid_selfies)
 
-            # Optional: write only valid rows
-            if output_csv:
-                with open(output_csv, "a") as f:
-                    for ss in valid_selfies:
-                        f.write(f"{ss},True,Novel\n")
+            # # Optional: write only valid rows
+            # if output_csv:
+            #     with open(output_csv, "a") as f:
+            #         for ss in valid_selfies:
+            #             f.write(f"{ss},True,Novel\n")
 
             total_generated += current_batch_size
             torch.cuda.empty_cache()
@@ -903,14 +902,24 @@ if __name__ == "__main__":
     #     forbidden_tokens=forbidden,
     # )
 
+    # gen = HuggingFaceMoleculeGenerator(
+    #     model_path="./runs/selfies_BART_finetune_model_small_adamw_earlyS_6_long_3x/model",
+    #     tokenizer_path="full_tokenizer_finetune_and_pretrain",
+    #     device="cuda" if torch.cuda.is_available() else "cpu",
+    #     forbidden_tokens=forbidden,
+    #     scaffold_sequences=scaffolds,
+    #     scaffold_bias=4.0,  # try 2–6; increase to strengthen the bias
+    # )
+
     gen = HuggingFaceMoleculeGenerator(
-        model_path="./runs/selfies_BART_finetune_model_small_adamw_earlyS_6_long_3x/model",
+        model_path="./runs/selfies_BART_finetune_1lay_model_small_adamw_earlyS_6_long_3x/model/",
         tokenizer_path="full_tokenizer_finetune_and_pretrain",
         device="cuda" if torch.cuda.is_available() else "cpu",
         forbidden_tokens=forbidden,
         scaffold_sequences=scaffolds,
         scaffold_bias=4.0,  # try 2–6; increase to strengthen the bias
     )
+
 
     start_time = time.time()
 

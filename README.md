@@ -230,3 +230,19 @@ python3 train_for_pretrain.py --hyperparameters_path="./combined_config_steps.ym
 python3 train_for_finetune.py --hyperparameters_path="./combined_config_WIP_FT.yml"
 
 ```
+
+
+Obtain data for Rounds 2 and 3:
+```bash
+bash ExploreThesis/WIP_Thesis/scripts/download_zinc.sh
+```
+Which will download all the ZINC15 druglike molecules. Then to get the 10M from ZINC15 we need to
+```bash
+
+```
+Put all mols into one `.smi` file
+Sample 10M molecules from the ZINC15 dataset.
+
+Then to work to process the 860M ZINC15 druglike molecules:
+`process_in_chunk.py` is utilized to make 860 1M molecules file to then process into a parquet file. This parquet file will
+interact with Dask in order to utilize the big data streaming for Round 3.
