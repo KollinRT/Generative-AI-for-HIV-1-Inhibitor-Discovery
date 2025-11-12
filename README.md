@@ -31,7 +31,7 @@ pymysql_info:
     host: 'host'
     user: 'user'
     password: 'pass'
-    database: 'chembl_34'
+    database: 'chembl_35'
 molecular_properties_to_filter:
     model_1:
         MW: 500
@@ -246,3 +246,75 @@ Sample 10M molecules from the ZINC15 dataset.
 Then to work to process the 860M ZINC15 druglike molecules:
 `process_in_chunk.py` is utilized to make 860 1M molecules file to then process into a parquet file. This parquet file will
 interact with Dask in order to utilize the big data streaming for Round 3.
+
+# Steps
+
+## How to acquire the data used in this
+
+### Download ChEMBL35 or newer from the portal
+[ChEMBL Downloads](https://chembl.gitbook.io/chembl-interface-documentation/downloads)
+
+
+
+Create the `chembl_35` database. 
+```
+CREATE DATABASE IF NOT EXISTS chembl_35;
+```
+Then fill in the database via the following command utilized with our Docker container. This populates the DB needed to work further on.
+```
+$> mysql -udev -pdevpass -h127.0.0.1 -P3306 chembl_35 < chembl_35_mysql.dmp
+```    
+This will populate the `chembl_35` database inside our container.    
+
+### Download Druglike Molecules from ZINC 15
+[ZINC15 Tranches](https://zinc15.docking.org/tranches/home/)
+
+Click the 3x3 dots button <img src="./images/ZINC15_dots.png" width="25" height="25"> and click the Druglike filter and click off of 5 on left and 500 on top. This will get the data in download that can be downloaded with a script via WGET. Run that script in the data directory to generate the data.
+
+or use the existing [File in repo](./scripts/download_zinc.sh)
+```bash
+bash download_zinc.sh
+```
+And let the whole file directory download. Much like the ChEMBL DB population, this might take several hours so please set time aside to accommodate this.
+
+<!-- ![3x3 Dots on ZINC15 Tranches Page](/images/ZINC15_dots.png "3x3 Tranch Dots") -->
+
+
+#### Get Round 2 Data 10M
+Once the data is in the directory needed we can run the script `combine_zinc15.sh` which will combine all the ZINC15 `*.smi` files so that we can then sample 10M for Round 2.
+
+```
+find . -type f -name "*.smi" -exec cat {} + > zinc15_all_raw.smi
+```
+Then one could run 
+```
+shuf -n 10000000 zinc15_all_raw.smi > zinc15_sampled_10M.smi
+```
+to get 10M molecules needed for Round 2.
+
+
+## Build the Docker image
+```
+docker build -t uv-run2-new23 .
+```
+## Run the Docker container
+```
+docker run -it --rm \
+	--shm-size=2g \
+    -v "$(pwd)"/data/mysql_data:/var/lib/mysql \
+    -v "$(pwd)/data":/data \
+    -v "$(pwd)":/app \
+    -p 3307:3306 \
+    uv-run2-new23
+```
+
+## Get the pretraining data
+```
+python3 getDataForPretrain.py --yaml="./PretrainSpecs.yml"
+```
+
+
+
+# TODO
+- [ ] Get the thing working. Get the 10M for round 2 with fingerprints working. Figure out what is needed to do this!
+- [ ] Once this is done we can then run the basic code...
