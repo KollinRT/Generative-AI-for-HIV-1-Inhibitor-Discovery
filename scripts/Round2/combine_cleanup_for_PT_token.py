@@ -1,5 +1,9 @@
 import pandas as pd
 
+df1 = pd.read_csv("../../model_name_model_4_warmup_selfies.csv")
+df1 = df1[["selfies"]]
+df1.to_csv("model_base_selfies_only.csv", index=False)
+
 # Load both CSV files
 df1 = pd.read_csv("model_base_selfies_only.csv")
 df2 = pd.read_csv("selfies_only_10M_zinc.csv")

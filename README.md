@@ -347,3 +347,9 @@ python3 getDataForPretrain.py --yaml="./PretrainSpecs.yml"
 
 df1 = pd.read_csv("model_base_selfies_only.csv")
 get process selfies script
+
+```
+sudo grep -Rli "text" / 2>/dev/null
+# Search for text in file and give line number
+grep -n "text" my_script.py
+```
