@@ -217,16 +217,32 @@ RTX 4090 24GB VRAM
 ```bash
 conda activate thesisproj
 
-python3 getDataForPretrain.py --yaml="./PretrainSpecs.yml"
+# Round 1
+python getDataForPretrain.py --parallel --yaml "./PretrainSpecs.yml"
+## If not-parallel
+python getDataForPretrain.py --yaml "./PretrainSpecs.yml"
 
+# To generate `combined_config.yml`
 python3 MakeDefaultHyperparams.py --file="./PretrainSpecs.yml"
+
+# Convert to SELFIES
+python addSelfiesDescription.py --smiles_column="canonical_smiles" --hyperparameters_path="./combined_config.yml"
 
 python3 prepro_ClustFing.py 
 
 python3 train_for_pretrain.py --hyperparameters_path="./combined_config.yml"
 
+
+
+# Round 2/3
+python3 getDataForPretrain.py --yaml="./PretrainSpecs.yml" --round="2"
+
+
+# Round 3
 python3 train_for_pretrain.py --hyperparameters_path="./combined_config_steps.yml"
 
+
+# Finetuning
 python3 train_for_finetune.py --hyperparameters_path="./combined_config_WIP_FT.yml"
 
 ```
@@ -237,11 +253,8 @@ Obtain data for Rounds 2 and 3:
 bash ExploreThesis/WIP_Thesis/scripts/download_zinc.sh
 ```
 Which will download all the ZINC15 druglike molecules. Then to get the 10M from ZINC15 we need to
-```bash
-
-```
-Put all mols into one `.smi` file
-Sample 10M molecules from the ZINC15 dataset.
+- Put all mols into one `.smi` file
+- Sample 10M molecules from the ZINC15 dataset.
 
 Then to work to process the 860M ZINC15 druglike molecules:
 `process_in_chunk.py` is utilized to make 860 1M molecules file to then process into a parquet file. This parquet file will
@@ -299,6 +312,8 @@ to get 10M molecules needed for Round 2. This gives me the molecules with `smile
 
 Then from here we can combine the 10M sampled with the 2.3M pretrained molecules to then do FPs.
 
+#### Get Round 3 Data ~860M
+This is a tricky round...!
 
 ## Build the Docker image
 ```
@@ -326,3 +341,9 @@ python3 getDataForPretrain.py --yaml="./PretrainSpecs.yml"
 - [ ] Get the thing working. Get the 10M for round 2 with fingerprints working. Figure out what is needed to do this!
 - [ ] Once this is done we can then run the basic code...
 - [ ] `model_base_selfies_only` is where I erase the top header for the tokenization portion....
+- [ ] Make sure that I have clearly delineated scripts for Round 1 and Round 2 versus Round 3 which is global steps.
+
+- [ ] Make `train_for_pretrain.py` flexible between epochs and steps.
+
+df1 = pd.read_csv("model_base_selfies_only.csv")
+get process selfies script
