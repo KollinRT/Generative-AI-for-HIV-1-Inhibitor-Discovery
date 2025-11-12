@@ -285,12 +285,19 @@ Once the data is in the directory needed we can run the script `combine_zinc15.s
 
 ```
 find . -type f -name "*.smi" -exec cat {} + > zinc15_all_raw.smi
+or
+awk 'FNR==1 && NR!=1 {next} {print}' $(find . -type f -name "*.smi") > zinc15_all_raw.smi
 ```
+The top one is quicker but is also grabbing the header multiple times. The bottom one times longer but is not.
 Then one could run 
+
+`WIP_Thesis/scripts/Round2/train_word_level_tokenizer_round2.py` is the file used to create the tokenizer for Round 2. Just need to now find the file that SELFIES the other files... Process the ChEMBL 35 datas...
 ```
 shuf -n 10000000 zinc15_all_raw.smi > zinc15_sampled_10M.smi
 ```
-to get 10M molecules needed for Round 2.
+to get 10M molecules needed for Round 2. This gives me the molecules with `smiles` and `zinc_id`. Need to check.
+
+Then from here we can combine the 10M sampled with the 2.3M pretrained molecules to then do FPs.
 
 
 ## Build the Docker image
@@ -318,3 +325,4 @@ python3 getDataForPretrain.py --yaml="./PretrainSpecs.yml"
 # TODO
 - [ ] Get the thing working. Get the 10M for round 2 with fingerprints working. Figure out what is needed to do this!
 - [ ] Once this is done we can then run the basic code...
+- [ ] `model_base_selfies_only` is where I erase the top header for the tokenization portion....
