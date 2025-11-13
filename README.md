@@ -2,6 +2,7 @@
 Intel Core i9-13900KF Processor (24 core (8P/16E)/32 Threads)  
 64 GB RAM 4800 MHz  
 RTX 4090 24GB VRAM  
+Ubuntu 22.04 LTS
 
 # How to run
 ## How to configure the input files...
