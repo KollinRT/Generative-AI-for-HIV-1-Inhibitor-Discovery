@@ -20,69 +20,9 @@ hyperparameters = load_hyperparameters("./combined_config.yml")
 bart_hyperparameters = hyperparameters.get("BART", {})
 
 # Define numPerms and thresholds as lists
-# numPerms = [64, 128, 256, 512]
-# numPerms = [512]
-# numPerms = [64]
 numPerms = [256]
 
-# thresholds_map = {
-#     64:  [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-#     128: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-#     256: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-#     512: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
-# }
-# thresholds_map = {
-#     512: [0.4, 0.5, 0.6]
-# }
-
 thresholds_map = {256: [0.7]}
-
-# thresholds_map = {
-#     64:  [0.7]
-# }
-
-
-# for key in bart_hyperparameters.keys():
-#     prepare_dataset_for_pretrain(f"./model_name_{key}.csv", f"./data/trainable_selfies_{key}.csv")
-#
-# for key in bart_hyperparameters.keys():
-#     df = pd.read_csv(f"./data/trainable_selfies_{key}.csv")
-#     print(f"reading the csv:\n{df.columns}")
-#     fp = create_fingerprint(df)
-#
-#     fp = fp.drop(columns=['Molecule'])
-#     print(fp)
-#     fp.to_csv(f"./data/trainable_selfies_{key}_FP.csv")
-
-# for key in bart_hyperparameters.keys():
-#     df = pd.read_csv(f"./data/trainable_selfies_{key}_FP.csv")
-#     # print(f"reading the clustered csv:\n{df.columns}")
-#     output_filename = f"./data/trainable_selfies_{key}_FP_CLUSTERED_{num_perm}perms_{int(threshold * 10)}.csv"
-#
-#     clusters = cluster_molecules(df, f"./data/trainable_selfies_{key}_FP_CLUSTERED_512perms_03.csv", num_perm=512, lsh_threshold=0.3)
-#     # print(clusters)
-#     # print(clusters)
-#     # clusters.to_csv(f"/media/kollin/WindowsSecondary1/ThesisBU/Thesis/WIP_Thesis/data/trainable_selfies_{key}_FP.csv")
-# Step 3: Perform Clustering using numPerms and thresholds
-# for key in bart_hyperparameters.keys():
-#     for num_perm in numPerms:
-#         for threshold in thresholds_map[num_perm]:
-#             df = pd.read_csv(f"./data/trainable_selfies_{key}_FP.csv")
-#
-#             output_filename = f"./data/trainable_selfies_{key}_FP_CLUSTERED_{num_perm}perms_{int(threshold*10)}.csv"
-#             clusters = cluster_molecules(df, output_filename, num_perm=num_perm, lsh_threshold=threshold)
-#
-#             print(f"Saved clustered file: {output_filename}")
-
-
-# for key in bart_hyperparameters.keys():
-#     prepare_dataset_for_pretrain(f"./model_name_{key}.csv", f"./data/trainable_selfies_{key}.csv")
-
-# TODO: 06/08/2025 @ 9:33 AM
-"""
-So, I need to make the ZINC data acquisition happen within one model file? Easy access? Or integrate the way I get the 12M
-into the getDataForPretrain?
-"""
 
 gc.collect()
 
@@ -134,5 +74,3 @@ for key in bart_hyperparameters.keys():
             )
 
     print(f"Clustering summary saved to: {log_filename}")
-
-# TODO: Just do all at 256 and 0.7..... NEW 03/07/2025 is the one that I utilized!

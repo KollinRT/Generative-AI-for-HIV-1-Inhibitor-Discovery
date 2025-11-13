@@ -9,18 +9,38 @@ from rdkit.Chem import Draw, Descriptors
 # from rdkit.Chem import Descriptors
 import matplotlib.pyplot as plt
 import csv
+import logging
 import yaml
+import os
 import pandas as pd
 from pandarallel import pandarallel
 
+from prepare_dataset import convert_to_selfies 
 
 # TODO: NEW Make some arg parser stuffs...
 import argparse
 
+# Logging Config
+logging.basicConfig(
+    filename="conversion_errors.log",
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+
+# --------------------------------------------------------------------------- #
+#  Argument parser
+# --------------------------------------------------------------------------- #
+
 # make a parser for parallel processing
 parser = argparse.ArgumentParser()
+# parser.add_argument(
+#     "--parallel", action="store_true", default=True, help="Use parallel processing"
+# )
 parser.add_argument(
-    "--parallel", action="store_true", default=True, help="Use parallel processing"
+    "--parallel",
+    action="store_true",
+    default=False,          # <--  changed from True
+    help="Use parallel processing"
 )
 # now for yaml file
 parser.add_argument(
@@ -29,12 +49,19 @@ parser.add_argument(
     help="YAML file path for config stuffs",
     metavar="/path/to/hyperparameters/*.yml",
 )
+parser.add_argument(
+    "--round",
+    default="1",
+    type=str,
+    help="Round 1 or 2/3"
+)
 # End of arg parser stuffs...
 args = parser.parse_args()
 
 
-# Configure a yaml file for config stuffs...
-
+# --------------------------------------------------------------------------- #
+#  Load YAML config
+# --------------------------------------------------------------------------- #
 # now make yaml_file the --yaml argument
 yaml_file = args.yaml
 # yaml_file = './FinetuneSpecs.yml'
@@ -45,7 +72,9 @@ with open(yaml_file, "r") as file:
 
 pymysql_info = data["pymysql_info"]
 
-
+# --------------------------------------------------------------------------- #
+#  Helper: DB connection
+# --------------------------------------------------------------------------- #
 # Function to establish connection to the database
 def create_db_connection():
     connection = pymysql.connect(
@@ -56,28 +85,68 @@ def create_db_connection():
         cursorclass=pymysql.cursors.DictCursor,
     )
     return connection
-
-
-def query_chembl(excluded_tids):
-    query = """
-    SELECT DISTINCT cs.canonical_smiles
-    FROM compound_structures cs
-    JOIN activities a ON cs.molregno = a.molregno
-    JOIN assays ass ON a.assay_id = ass.assay_id
-    WHERE ass.tid NOT IN (191, 12456)
-    AND a.standard_type = 'IC50'
-    AND a.standard_value IS NOT NULL;
-    """
+# --------------------------------------------------------------------------- #
+#  SQL helpers
+# --------------------------------------------------------------------------- #
+def execute_sql_query(query):
     connection = create_db_connection()
     try:
         with connection.cursor() as cursor:
             cursor.execute(query)
             results = cursor.fetchall()  # Fetch all results
-            return results  # Return the list of dictionaries
+            # Extract only the 'canonical_smiles' column
+            smiles_list = [
+                result["canonical_smiles"]
+                for result in results
+                if "canonical_smiles" in result
+            ]
+            return smiles_list
     finally:
         connection.close()
 
+# --------------------------------------------------------------------------- #
+#  ChEMBL query - Arg passed for optional differentiation
+# --------------------------------------------------------------------------- #
+if args.round == "1":
+    def query_chembl(excluded_tids):
+        query = """
+        SELECT DISTINCT cs.canonical_smiles
+        FROM compound_structures cs
+        JOIN activities a ON cs.molregno = a.molregno
+        JOIN assays ass ON a.assay_id = ass.assay_id
+        WHERE ass.tid NOT IN (191, 12456)
+        AND a.standard_type = 'IC50'
+        AND a.standard_value IS NOT NULL;
+        """
+        connection = create_db_connection()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(query)
+                results = cursor.fetchall()  # Fetch all results
+                return results  # Return the list of dictionaries
+        finally:
+            connection.close()
+elif args.round == "2" or args.round == "3":
+    def query_chembl(excluded_tids):
+        query = """
+        SELECT DISTINCT cs.canonical_smiles
+        FROM compound_structures cs
+        JOIN activities a ON cs.molregno = a.molregno
+        JOIN assays ass ON a.assay_id = ass.assay_id
+        WHERE ass.tid NOT IN (191, 12456)
+        """
+        connection = create_db_connection()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(query)
+                results = cursor.fetchall()  # Fetch all results
+                return results  # Return the list of dictionaries
+        finally:
+            connection.close()
 
+#  ------------------------------------------------------------------ #
+#  Compute descriptors 
+#  ------------------------------------------------------------------ #
 def compute_properties(row):
     from rdkit import Chem
 
@@ -165,21 +234,6 @@ def compute_properties(row):
 #         connection.close()
 
 
-def execute_sql_query(query):
-    connection = create_db_connection()
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(query)
-            results = cursor.fetchall()  # Fetch all results
-            # Extract only the 'canonical_smiles' column
-            smiles_list = [
-                result["canonical_smiles"]
-                for result in results
-                if "canonical_smiles" in result
-            ]
-            return smiles_list
-    finally:
-        connection.close()
 
 
 # chembl_34.compound_structures is where canonical_smiles is
@@ -360,17 +414,58 @@ if "canonical_smiles" not in df.columns:
         "The input CSV file must contain a column named 'canonical_smiles'"
     )
 
+# # --------------------------------------------------------------------------- #
+# #  Initialize pandarallel – optional progress bar
+# # --------------------------------------------------------------------------- #
+if args.parallel:
+    pandarallel.initialize(progress_bar=args.parallel)
+# pandarallel.initialize(
+#         nb_workers=os.cpu_count() - 1,
+#         progress_bar=args.parallel)
 
-pandarallel.initialize(progress_bar=True)
+# if args.parallel:
+#     df["selfies"] = df["canonical_smiles"].parallel_apply(convert_to_selfies)
+# else:
+#     df["selfies"] = df["canonical_smiles"].apply(convert_to_selfies)
+
 if args.parallel:
     properties_series = df.parallel_apply(compute_properties, axis=1)
 else:
     properties_series = df.apply(compute_properties, axis=1)
 
 
-# Convert the Series to a DataFrame
+# # Convert the Series to a DataFrame
 properties_df = pd.DataFrame(properties_series.tolist())
 
+
+# # --------------------------------------------------------------------------- #
+# #  Convert SMILES → SELFIES and **add a new column**
+# # --------------------------------------------------------------------------- #
+# # We *don’t* overwrite the Series that contains the descriptors
+# #   → we simply create a dedicated column.
+# if args.parallel:
+#     # df["selfies"] = df["canonical_smiles"].parallel_apply(convert_to_selfies)
+#     # df.parallel_apply(lambda r: convert_to_selfies(r['canonical_smiles']), axis=1)
+#     df["selfies"] = df["canonical_smiles"].parallel_apply(convert_to_selfies)  # try this after initialize
+# else:
+#     df["selfies"] = df["canonical_smiles"].apply(convert_to_selfies)
+
+# --------------------------------------------------------------------------- #
+#  Compute descriptors *after* selfies – we keep the raw SMILES
+# --------------------------------------------------------------------------- #
+# if args.parallel:
+#     properties_series = df.parallel_apply(compute_properties, axis=1)
+# else:
+#     properties_series = df.apply(compute_properties, axis=1)
+
+# # Convert the Series of dicts to a proper DataFrame
+# props_df = pd.DataFrame(properties_series.tolist())
+
+# --------------------------------------------------------------------------- #
+#  Merge everything together
+# --------------------------------------------------------------------------- #
+# properties_df = pd.concat([df, props_df], axis=1)  # canonical_smiles, selfies, props...
+# properties_df = properties_df.drop(columns=["canonical_smiles.1"])
 
 # Print the DataFrame
 print(properties_df)

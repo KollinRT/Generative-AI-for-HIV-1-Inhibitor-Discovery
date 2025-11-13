@@ -5,6 +5,7 @@ import logging
 import argparse
 
 from utils import load_hyperparameters
+from prepare_dataset import convert_to_selfies
 
 # Setup basic configuration for logging
 logging.basicConfig(
@@ -12,16 +13,6 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s:%(levelname)s:%(message)s",
 )
-
-
-def convert_to_selfies(smiles_string, index=None):
-    try:
-        return sf.encoder(smiles_string)
-    except sf.EncoderError:
-        logging.info(
-            f"EncoderError in Conversion at index {index} for SMILES: {smiles_string}"
-        )
-        return None  # Return None or a specific flag to indicate conversion failure
 
 
 if __name__ == "__main__":
@@ -44,7 +35,7 @@ if __name__ == "__main__":
     hyperparameters = load_hyperparameters(args.hyperparameters_path)
     print(
         "Loaded hyperparameters:", hyperparameters
-    )  # TODO: NEW 02/16/2025 figure out why BART is empty in combined_config... I THINK IT WORKS... ✓✓
+    )
     bart_hyperparameters = hyperparameters.get("BART", {})
     print("BART hyperparameters:", bart_hyperparameters)
 

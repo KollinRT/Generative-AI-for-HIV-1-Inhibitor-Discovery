@@ -1,4 +1,3 @@
-# utils_constraints.py
 from transformers import LogitsProcessor
 import torch
 from typing import List

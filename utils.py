@@ -88,24 +88,6 @@ def is_model_done(save_dir):
     return os.path.exists(os.path.join(save_dir, "done.txt"))
 
 
-# TODO: 08/03/2025 9:36 pm look more into https://github.com/jettify/pytorch-optimizer
-"""
-import torch_optimizer as optim
-
-# model = ...
-optimizer = optim.Lamb(
-    m.parameters(),
-    lr= 1e-3,
-    betas=(0.9, 0.999),
-    eps=1e-8,
-    weight_decay=0,
-)
-optimizer.step()
-
-We have this... we get lr from the CFG, betas are just default... IDK what eps is... weight decay is from the config also...
-"""
-
-
 def make_optimizer(model, cfg):
     lr = cfg["LEARNING_RATE"]
     print(type(cfg["LEARNING_RATE"]), cfg["LEARNING_RATE"])

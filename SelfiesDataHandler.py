@@ -85,9 +85,56 @@ def collate_fn(batch, mode="fine"):
 
     return batch_dict
 
+class SelfiesDatasetRound2(Dataset):
+    # def __init__(self, csv_file, tokenizer_path, mode='pretrain'):
+    def __init__(self, dataframe, tokenizer, mode='pretrain'):
+        """Initialize the dataset, loading data from CSV, setting up tokenizer and mode."""
+        # self.data = pd.read_csv(csv_file)
+        # self.data = dataframe
+        self.dataframe = dataframe.reset_index(drop=True)  # Ensure indices are 0,1,2,...
+
+
+        # print(f"CSV columns: {self.data.columns.tolist()}")  # Debugging print statement
+        # self.tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
+        self.tokenizer = tokenizer
+        self.mode = mode  # Options are 'pretrain' or 'finetune'
+
+    def __len__(self):
+        """Return the total number of entries in the dataset."""
+        return len(self.dataframe)
+
+    def __getitem__(self, idx):
+        """Retrieve an item by index."""
+        selfies_string = str(self.dataframe.iloc[idx]['selfies'])  # force cast to str
+        #selfies_string = self.dataframe.iloc[idx]['selfies']
+        #print("selfies_string:", selfies_string)
+        # Correctly tokenize SELFIES using semantic splitting
+        tokens = list(sf.split_selfies(selfies_string))  # ['[C]', '[C]', '[O]']
+        input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(tokens), dtype=torch.long)
+
+        #print("input_ids:", input_ids)
+        # Pad/truncate to max_length (e.g., 256)
+        # max_length = 256
+        attention_mask = torch.ones(len(input_ids), dtype=torch.long)
+        #
+
+        sample = {
+            'input_ids': input_ids,
+            'attention_mask': attention_mask
+        }
+        return sample
+
+    def encode_inhibition_site(self, inhibition_site):
+        """Encodes the inhibition site after normalizing string to prevent matching errors."""
+        inhibition_site = inhibition_site.strip().upper()  # Normalize by trimming spaces and converting to uppercase
+        if 'RVP' in inhibition_site:
+            return 0
+        elif 'RVE' in inhibition_site:
+            return 1
+        return -1  # Return -1 for cases where neither RVP nor RVE is found
+
 
 class SelfiesDataset(Dataset):
-    # def __init__(self, csv_file, tokenizer_path, mode='pretrain'):
     def __init__(self, dataframe, tokenizer, mode="pretrain", mask_prob=0.15):
         """Initialize the dataset, loading data from CSV, setting up tokenizer and mode."""
         # self.dataframe = dataframe.reset_index(drop=True)  # Ensure indices are 0,1,2,...
@@ -191,7 +238,6 @@ class SelfiesFinetuneDataset(Dataset):
         return len(self.dataframe)
 
     def __getitem__(self, idx):
-        # print(f"self.tokenizer.mask_token_id: {self.tokenizer.mask_token_id}")
         selfies_string = str(self.dataframe.iloc[idx]["selfies"])
 
         # Corrupt only in 'pretrain' mode
@@ -217,7 +263,6 @@ class SelfiesFinetuneDataset(Dataset):
         # Mask labels for unmasked tokens:
         mask_token_id = self.tokenizer.mask_token_id
 
-        # Suggested vectorized version:
         labels = torch.where(
             input_ids == mask_token_id, labels, torch.full_like(labels, -100)
         )
@@ -294,7 +339,6 @@ class SelfiesIterableDataset(IterableDataset):
 
     def process_row(self, selfies_string):
         """Corrupt, tokenize, and create model input tensors."""
-        # Corrupt for pretraining
         corrupted_selfies = (
             self.corrupt_selfies(selfies_string)
             if self.mode == "pretrain"
