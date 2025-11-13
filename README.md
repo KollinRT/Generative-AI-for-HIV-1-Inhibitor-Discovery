@@ -83,95 +83,8 @@ python3 getDataForFinetune.py --yaml "./FinetuneSpecs.yml"
 returns a `.csv` file with 
 `canonical_smiles,MW,numC,chain_length,cLogP,numRings,IC50,site_name`.
 
-
-<!-- ### Logical execution -->
-<!-- #### 1. Get the data
-utilize the file
-`getDataForPretrain.yml` 
-```bash
-python3 getDataForPretrain.py --yaml="./PretrainSpecs.yml"
-```
-gets you going to generate the files. This can then be fed into the next step.
-
-[//]: # (##### Need to make the default parameters)
-
-[//]: # (```bash)
-
-[//]: # (python3 MakeDefaultHyperparams.py --file="./PretrainSpecs.yml")
-
-[//]: # (```)
-
-#### 2. Generate the combined_config file
-utilize the file
-`train_for_pretrain.py`
-
-[//]: # (```bash)
-
-[//]: # (python3 train_for_pretrain.py --hyperparameters_path="./combined_config.yml")
-
-[//]: # (```)
-
-```bash
-python3 MakeDefaultHyperparams.py --file="./PretrainSpecs.yml"
-```
-[//]: # (> Combined configuration saved to combined_config.yml)
-
-But first you have to generate the data for the `./combined_config.yml` file.
-This is in the 
-`MakeDefaultHyperparams.py` 
-file along with the default hyperparams config.
-Run it then generate the `./combined_config.yml`
-
-#### 3a. Generate the fingerprints and the clusters.
-The fingerprints for the models can be generated with the
-`generateClusters.py` and `generateFingerprints.py`
-files. These may be incorporated into the `train_for_pretrain.py` file, but still would have to get it working, as it is not currently but works independently...  
-**TODO**:
-- [ ] Get the standalone files to work well and consistently and document the process.
-    - [ ] Get this implemented into the current logic and not standalone?
-
-This will perform the clustering that will interplay with the `ClusteredSelfiesDataset` class in `train_for_pretrain.py`.
-This will add the fingerprints and cluster columns into the df (csv) file that will be utilized to help select the most likely singleton drugs for use in validation splitting.
-- should be one-offs, I hope? The last clusterIDs are lower in total count?
-
-
-Should be the following basics
-```bash
-python3 prepro_ClustFing.py 
-```
-At the moment to generate selfies, generate fingerprints, and then generate clusters...
-
-
-
-#### 3b. Train the pre-train model
-utilize the file
-`train_for_pretrain.py`
-This will work with the `./combined_config.yml` file since it needs the hyperparameters.  
-
-
-```bash
-python3 train_for_pretrain.py --hyperparameters_path="./combined_config.yml"
-```
-This will train the model with the SELFIES text. -->
-
-
-
-
-
-
-<!-- #### TODO:   
-- [ ] Get `getDataForFinetune.py` working for the finetuning dataset.
-    - [ ] Need to get random sampling done for 9:1 split for finetuning.
-- [ ] explore hyperparameter optimization
-    - [ ] this could include a pytorch LRScheduler... 
-    - [ ] this could also include trying adagrad? Maybe optimizing hyperparameter dimensions?
-      - [ ] check the post more...
-
-- [ ] This could be trying `"ReduceLROnPlateau" class (https://github.com/pytorch/pytorch/blob/main/torch/optim/lr_scheduler.py), would this work well? -->
-
-
 #### Definitive Workflow make into a bash script
-Build the Dockerfile and run the container.
+Build the `Dockerfile` and run the container.
 
 ```bash
 # Round 1
@@ -211,7 +124,7 @@ python3 train_for_finetune.py --hyperparameters_path="./combined_config_WIP_FT.y
 ```
 Obtain data for Rounds 2 and 3:
 ```bash
-bash ExploreThesis/WIP_Thesis/scripts/download_zinc.sh
+sh ExploreThesis/WIP_Thesis/scripts/download_zinc.sh
 ```
 Which will download all the ZINC15 druglike molecules. Then to get the 10M from ZINC15 we need to
 - Put all mols into one `.smi` file
@@ -228,8 +141,6 @@ Build the Dockerfile and run the container.
 
 ### Download ChEMBL35 or newer from the portal
 [ChEMBL Downloads](https://chembl.gitbook.io/chembl-interface-documentation/downloads)
-
-
 
 Create the `chembl_35` database. 
 ```
@@ -252,15 +163,10 @@ bash download_zinc.sh
 ```
 And let the whole file directory download. Much like the ChEMBL DB population, this might take several hours so please set time aside to accommodate this.
 
-<!-- ![3x3 Dots on ZINC15 Tranches Page](/images/ZINC15_dots.png "3x3 Tranch Dots") -->
-
-
 #### Get Round 2 Data 10M
 Once the data is in the directory needed we can run the script `combine_zinc15.sh` which will combine all the ZINC15 `*.smi` files so that we can then sample 10M for Round 2.
 
 ```
-find . -type f -name "*.smi" -exec cat {} + > zinc15_all_raw.smi
-or
 awk 'FNR==1 && NR!=1 {next} {print}' $(find . -type f -name "*.smi") > zinc15_all_raw.smi
 ```
 The top one is quicker but is also grabbing the header multiple times. The bottom one times longer but is not.
@@ -281,7 +187,7 @@ Getting the data for Round 3 is done through downloading the data from the ZINC1
 
 ## Build the Docker image
 ```
-docker build -t uv-run2-new23 .
+docker build -t gen_ai_hiv .
 ```
 ## Run the Docker container
 ```
@@ -291,7 +197,7 @@ docker run -it --rm \
     -v "$(pwd)/data":/data \
     -v "$(pwd)":/app \
     -p 3307:3306 \
-    uv-run2-new23
+    gen_ai_hiv
 ```
 ## Run with GPU capability
 ```
@@ -302,31 +208,17 @@ docker run -it --rm \
     -v "$(pwd)/data":/data \
     -v "$(pwd)":/app \
     -p 3308:3306 \
-    uv-run2-new23
+    gen_ai_hiv
 ```
 ## Get the pretraining data
 ```
 python3 getDataForPretrain.py --yaml="./PretrainSpecs.yml"
 ```
 
-
-
-# TODO
-- [ ] Get the thing working. Get the 10M for round 2 with fingerprints working. Figure out what is needed to do this!
-- [ ] Once this is done we can then run the basic code...
-- [ ] `model_base_selfies_only` is where I erase the top header for the tokenization portion....
-- [ ] Make sure that I have clearly delineated scripts for Round 1 and Round 2 versus Round 3 which is global steps.
-
-- [ ] Make `train_for_pretrain.py` flexible between epochs and steps.
-
-df1 = pd.read_csv("model_base_selfies_only.csv")
-get process selfies script
-
+#### Random bits
+Verify that the files do not have extraneous lines or double check where file references in files are located.
 ```
 sudo grep -Rli "text" / 2>/dev/null
 # Search for text in file and give line number
 grep -n "text" my_script.py
-```
-```
-python process_10M_parallel.py
 ```
