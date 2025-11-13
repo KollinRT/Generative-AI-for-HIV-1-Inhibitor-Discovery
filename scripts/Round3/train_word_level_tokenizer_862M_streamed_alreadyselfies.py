@@ -18,7 +18,7 @@ SPECIAL_TOKENS = ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "<s>", "</s>"]
 # =====================
 
 # === STEP 1: Load Parquet file lazily ===
-print("🔄 Streaming Parquet partitions and generating tokenized corpus...")
+print("Streaming Parquet partitions and generating tokenized corpus...")
 
 df_dask = dd.read_parquet(PARQUET_PATH, columns=[SELFIES_COLUMN])
 df_dask = df_dask.dropna(subset=[SELFIES_COLUMN])
@@ -45,7 +45,7 @@ for delayed_partition in tqdm(df_dask.to_delayed(), desc="🔧 Scheduling partit
     tasks.append(task)
 
 # === STEP 4: Run in parallel ===
-print("🚀 Running tokenization in parallel...")
+print("Running tokenization in parallel...")
 results = compute(*tasks, scheduler="threads")  # Or "processes"
 
 # === STEP 5: Merge counters + write corpus ===
@@ -57,7 +57,7 @@ with open(CORPUS_FILE, "w") as f:
             f.write(line + "\n")
 
 # === STEP 6: Build vocab dictionary ===
-print("\n📚 Building vocabulary...")
+print("\n Building vocabulary...")
 vocab = {
     token: idx + len(SPECIAL_TOKENS)
     for idx, (token, _) in enumerate(vocab_counter.most_common())
@@ -66,7 +66,7 @@ for idx, token in enumerate(SPECIAL_TOKENS):
     vocab[token] = idx
 
 # === STEP 7: Create WordLevel tokenizer ===
-print("🔧 Creating tokenizer...")
+print("Creating tokenizer...")
 model = WordLevel(vocab=vocab, unk_token="[UNK]")
 tokenizer = Tokenizer(model)
 tokenizer.pre_tokenizer = Whitespace()
@@ -84,10 +84,10 @@ hf_tokenizer = PreTrainedTokenizerFast(
 )
 
 hf_tokenizer.save_pretrained(TOKENIZER_DIR)
-print(f"\n✅ Tokenizer saved to: {TOKENIZER_DIR}")
+print(f"\n Tokenizer saved to: {TOKENIZER_DIR}")
 
 # === STEP 9: Test tokenizer ===
-print("\n🔍 Testing tokenizer on example SELFIES string...")
+print("\n Testing tokenizer on example SELFIES string...")
 
 example_selfies = sf.encoder("CCO")
 tokens = list(sf.split_selfies(example_selfies))
@@ -108,7 +108,7 @@ print("[Method3] encode_batch.ids         →", enc_batch[0].ids)
 print("[Method3] encode_batch.tokens      →", enc_batch[0].tokens)
 
 # === STEP 10: Vocab sanity check ===
-print("\n🔎 Vocab sanity check:")
+print("\n Vocab sanity check:")
 vocab_set = hf_tokenizer.get_vocab()
 for t in tokens:
     print(f"{t}: {'FOUND' if t in vocab_set else 'MISSING'}")

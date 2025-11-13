@@ -114,12 +114,24 @@ def run_validation_batched(
 
 def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_path):
     """
-    model        : a BartForConditionalGeneration
-    train_loader : DataLoader for pretrain set
-    val_loader   : DataLoader for validation set
-    cfg          : one of your hyperparameter dicts (e.g. hyperparameters_dict[key])
-    save_dir     : where to save the best model
-    csv_file_path: writes to the designated csv_file_path
+    Args:
+        model : BartForConditionalGeneration
+            Model to pass in to be pretrained.
+
+        train_loader : torch.utils.data.DataLoader
+            DataLoader for pretrain set
+
+        val_loader : torch.utils.data.DataLoader
+            DataLoader for validation set
+
+        cfg : yaml dict
+            YAML file with hyperparameter dicts (e.g. hyperparameters_dict[key])
+
+        save_dir : str
+            Where to save the best model
+
+        csv_file_path : str
+            writes to the designated csv_file_path
     """
     os.makedirs(save_dir, exist_ok=True)
     # csv_path = os.path.join(save_dir, "training_log.csv")
@@ -140,7 +152,7 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     checkpoint_path = os.path.join(save_dir, "checkpoint_resume.pt")
     start_epoch = 1
     if os.path.exists(checkpoint_path):
-        print(f"🔁 Resuming from checkpoint: {checkpoint_path}")
+        print(f"Resuming from checkpoint: {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path)
         model.load_state_dict(checkpoint["model_state"])
         optimizer.load_state_dict(checkpoint["optimizer_state"])
@@ -230,11 +242,11 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
                 "patience": patience,
             }
             torch.save(checkpoint, os.path.join(save_dir, "checkpoint_resume.pt"))
-            print(f"✅ Checkpoint saved at epoch {epoch}")
+            print(f"Checkpoint saved at epoch {epoch}")
         else:
             patience += 1
             if patience >= max_patience:
-                print(f"? Early stopping (no improvement in {max_patience} epochs)")
+                print(f"Early stopping (no improvement in {max_patience} epochs)")
                 break
 
         # Scheduler step
@@ -272,12 +284,24 @@ def train_for_pretrain_steps(
     csv_file_path: str,
 ) -> None:
     """
-    model        : a BartForConditionalGeneration
-    train_loader : DataLoader for pretrain set
-    val_loader   : DataLoader for validation set
-    cfg          : one of your hyperparameter dicts (e.g. hyperparameters_dict[key])
-    save_dir     : where to save the best model
-    csv_file_path: writes to the designated csv_file_path
+    Args:
+        model : BartForConditionalGeneration
+            Model to pass in to be pretrained.
+
+        train_loader : torch.utils.data.DataLoader
+            DataLoader for pretrain set
+
+        val_loader : torch.utils.data.DataLoader
+            DataLoader for validation set
+
+        cfg : yaml dict
+            YAML file with hyperparameter dicts (e.g. hyperparameters_dict[key])
+
+        save_dir : str
+            Where to save the best model
+
+        csv_file_path : str
+            writes to the designated csv_file_path
     """
     # Hyperparameters
     max_training_steps: int = cfg["MAX_TRAINING_STEPS"]
@@ -323,7 +347,7 @@ def train_for_pretrain_steps(
     best_val_loss: float = float("inf")
 
     if os.path.exists(checkpoint_path):
-        print(f"🔁 Resuming from checkpoint: {checkpoint_path}")
+        print(f"Resuming from checkpoint: {checkpoint_path}")
         # checkpoint = torch.load(checkpoint_path)
         checkpoint: Dict[str, Any] = torch.load(checkpoint_path)
         model.load_state_dict(checkpoint["model_state"])
@@ -342,10 +366,10 @@ def train_for_pretrain_steps(
                 )  # assuming 'global_step' is column index 1
                 if global_step <= last_logged_step:
                     print(
-                        f"⚠️ Warning: Resuming at step {global_step} but last logged step is {last_logged_step}."
+                        f"Warning: Resuming at step {global_step} but last logged step is {last_logged_step}."
                     )
                     print(
-                        "🧹 You might want to clean or truncate the CSV to prevent mixing runs."
+                        "You might want to clean or truncate the CSV to prevent mixing runs."
                     )
     else:
         # Back to config setup
@@ -437,13 +461,13 @@ def train_for_pretrain_steps(
                         },
                         checkpoint_path,
                     )
-                    print(f"✅ Checkpoint saved at step {global_step}")
+                    print(f"Checkpoint saved at step {global_step}")
                 else:
                     patience += 1
                     if cfg.get("early_stopping_toggle", True):
                         if patience >= max_patience:
                             print(
-                                f"⛔ Early stopping triggered after {max_patience} validations with no improvement."
+                                f"Early stopping triggered after {max_patience} validations with no improvement."
                             )
                             csv_file.close()
                             save_final_model_if_needed(
@@ -480,7 +504,7 @@ def train_for_pretrain_steps(
                         backup_path,
                     )
                     print(
-                        f"💾 Backup checkpoint saved at step {global_step} → {backup_path}"
+                        f"Backup checkpoint saved at step {global_step} → {backup_path}"
                     )
 
                 current_lr: float = float(optimizer.param_groups[0]["lr"])
@@ -525,7 +549,7 @@ def train_for_pretrain_steps(
     final_model_dir: str = os.path.join(save_dir, "final_model")
     os.makedirs(final_model_dir, exist_ok=True)
     model.save_pretrained(final_model_dir)
-    print(f"💾 Final model saved to {final_model_dir}")
+    print(f"Final model saved to {final_model_dir}")
 
     # Mark training as complete
     write_done_marker(save_dir)
@@ -584,144 +608,6 @@ def prepare_data(args: argparse.Namespace, key: str) -> None:
             f"./model_name_{key}.csv", f"./data/trainable_selfies_{key}.csv"
         )
     print(f"File for training is ready! (trainable_selfies_{key}.csv)")
-
-
-# def pretrain_BART(
-#     hyperparameters_dict: Mapping[str, TrainConfig],
-#     args: argparse.Namespace,
-#     key: str,
-# ) -> None:
-#     """
-#     Args:
-#         hyperparameters_dict: YAML file to be passed in with configuration.
-#         args: NOT NECESSARY.
-#         key: key name of model for downstream naming.
-
-#     Returns:
-
-#     """
-#     # Setup File config parameters
-#     current_config = hyperparameters_dict[key]
-
-#     run_dir: str = f"./runs/selfies_BART_PRETRAIN_{key}"
-#     model_save_dir: str = os.path.join(run_dir, "model")
-#     csv_file_path: str = os.path.join(run_dir, "pretraining_loss.csv")
-
-#     # Define Training Hyperparameters
-#     train_batch_size: int = current_config["TRAIN_BATCH_SIZE"]
-#     val_batch_size: int = current_config["VALID_BATCH_SIZE"]
-
-#     # Load the tokenizer
-#     # tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer")
-#     tokenizer = PreTrainedTokenizerFast.from_pretrained(
-#         "./code_run_files/full_tokenizer_finetune_and_pretrain"
-#     )
-
-#     df = pd.read_csv(f"model_name_{key}.csv")
-#     # print(df.columns)
-#     # print(df.head(2))
-
-#     # Sort by cluster and split into training and validation sets
-#     # df = df.sort_values(by=['Cluster'])
-#     # mol_count = int(len(df) * 0.9)
-#     # Split 90% train, 10% validation
-#     # train_frac = 0.9
-#     # df = df.shuffle(random_state=42, shuffle="tasks")
-#     # train_df = df[:mol_count]  # 90% for training
-#     # valid_df = df[mol_count:]  # 10% for validation
-#     # train_df = df.sample(frac=train_frac, random_state=42)
-#     # valid_df = df.drop(train_df.index)
-#     # train_frac = 0.9
-#     # train_df, valid_df = df.random_split([train_frac, 1 - train_frac], random_state=42)
-#     train_frac = 0.9
-#     train_df = df.sample(frac=train_frac, random_state=42).reset_index(drop=True)
-#     valid_df = df.drop(train_df.index).reset_index(drop=True)
-
-#     # randomize the data and redo it.
-#     # train_df = train_df.sample(frac=1, random_state=42).reset_index(drop=True)
-#     # valid_df = valid_df.sample(frac=1, random_state=42).reset_index(drop=True)
-
-#     # # Instead of passing the raw DataFrame to DataLoader, wrap it in the new ClusteredSelfiesDataset
-#     # Partition-based split for iterable dataset
-#     n_partitions: int = df.npartitions
-#     train_partitions: List[int] = list(range(int(n_partitions * 0.9)))  # first 90%
-#     val_partitions: List[int] = list(
-#         range(int(n_partitions * 0.9), n_partitions)
-#     )  # last 10%
-
-#     train_dataset = SelfiesDataset(
-#         df, tokenizer, mode="pretrain"
-#     )
-#     valid_dataset = SelfiesDataset(
-#         df, tokenizer, mode="pretrain"
-#     )
-
-#     use_amp: bool = gpu_used == "B200"
-#     if use_amp:
-#         # B200
-#         pretrain_loader = DataLoader(
-#             train_dataset,
-#             batch_size=train_batch_size,
-#             collate_fn=lambda x: collate_fn(x, mode="pre"),
-#             num_workers=0,
-#             pin_memory=True,
-#         )
-#         val_loader = DataLoader(
-#             valid_dataset,
-#             batch_size=val_batch_size,
-#             collate_fn=lambda x: collate_fn(x, mode="pre"),
-#             num_workers=0,
-#             pin_memory=True,
-#         )
-#     else:
-#         # 4090
-#         pretrain_loader = DataLoader(
-#             train_dataset,
-#             batch_size=train_batch_size,
-#             collate_fn=lambda x: collate_fn(x, mode="pre"),
-#         )
-#         val_loader = DataLoader(
-#             valid_dataset,
-#             batch_size=val_batch_size,
-#             collate_fn=lambda x: collate_fn(x, mode="pre"),
-#         )
-
-#     config = BartConfig(
-#         vocab_size=tokenizer.vocab_size,
-#         max_position_embeddings=hyperparameters_dict[key]["MAX_POSITION_EMBEDDINGS"],
-#         encoder_layers=hyperparameters_dict[key]["ENCODER_LAYERS"],
-#         decoder_layers=hyperparameters_dict[key]["DECODER_LAYERS"],
-#         encoder_attention_heads=hyperparameters_dict[key][
-#             "NUM_ENCODER_ATTENTION_HEADS"
-#         ],
-#         decoder_attention_heads=hyperparameters_dict[key][
-#             "NUM_DECODER_ATTENTION_HEADS"
-#         ],
-#         encoder_ffn_dim=hyperparameters_dict[key]["ENCODER_FFN_DIM"],
-#         decoder_ffn_dim=hyperparameters_dict[key]["DECODER_FFN_DIM"],
-#         hidden_size=hyperparameters_dict[key]["HIDDEN_SIZE"],
-#         pad_token_id=tokenizer.pad_token_id,
-#         bos_token_id=tokenizer.bos_token_id,
-#         eos_token_id=tokenizer.eos_token_id,
-#         mask_token_id=tokenizer.mask_token_id,
-#     )
-#     model = BartForConditionalGeneration(config)
-#     # model = torch.compile(model)
-
-#     # # Print DataFrame info for debugging
-#     # print("Final training DataFrame:")
-#     # print(train_df.head(2))
-
-#     # Training Loop START
-#     # train_for_pretrain(model, pretrain_loader, val_loader, current_config, model_save_dir, csv_file_path)
-#     train_for_pretrain(
-#         model,
-#         pretrain_loader,
-#         val_loader,
-#         current_config,
-#         model_save_dir,
-#         csv_file_path,
-#     )
 
 
 def pretrain_BART(hyperparameters_dict, args, key):

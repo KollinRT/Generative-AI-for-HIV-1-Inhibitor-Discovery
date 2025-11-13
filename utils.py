@@ -9,17 +9,28 @@ import yaml
 from pytorch_lamb import Lamb
 from torch.utils.data import Dataset
 from transformers.generation.logits_process import LogitsProcessor
+from typing import Any, Dict
 
 
-def diff_to_string(base_config, other_config):
+def diff_to_string(
+    base_config: Dict[str, Any], other_config: Dict[str, Any]
+) -> Dict[str, Any]:
     """
+    Compare two configuration dictionaries and return the keys whose
+    values differ in `other_config` relative to `base_config`.
 
     Args:
-        base_config:
-        other_config:
+        base_config : dict
+            The reference configuration (e.g., loaded from a YAML file).
+
+        other_config : dict
+            The configuration to compare against the base configuration.
 
     Returns:
-
+        diffs : dict
+            A dictionary containing only the keys where `other_config`
+            differs from `base_config`. The returned values are the values
+            found in `other_config`.
     """
     diffs = {}
     for key in base_config:
@@ -31,15 +42,27 @@ def diff_to_string(base_config, other_config):
 
 
 # def encode_differences_to_string(base_model_name, diffs):
-def encode_differences_to_string(base_model_name, base_config, other_config):
+def encode_differences_to_string(
+    base_model_name: str, base_config: Dict[str, Any], other_config: Dict[str, Any]
+) -> str:
     """
+    Encode configuration differences into a descriptive string suitable
+    for naming output files. Uses `diff_to_string` to extract values
+    that differ between two configuration dictionaries.
     Args:
-        base_model_name:
-        base_config:
-        other_config:
+        base_model_name : str
+            Base model identifier (e.g., run name or model version).
+
+        base_config : dict
+            Reference configuration dictionary.
+
+        other_config : dict
+            Configuration dictionary to compare against the base.
 
     Returns:
-
+        str
+            A filename-safe, descriptive string encoding all differences.
+            Example: "BART__LR-3e-5__BATCH_SIZE-64"
     """
     diffs = diff_to_string(base_config, other_config)
     parts = [base_model_name]
@@ -50,19 +73,30 @@ def encode_differences_to_string(base_model_name, base_config, other_config):
     return "__".join(parts)
 
 
-# def save_final_model_if_needed(model, save_dir):
-#     """Ensure the final model is saved if no best version was saved."""
-#     model_path = os.path.join(save_dir, "pytorch_model.bin")
-#     if not os.path.exists(model_path):
-#         print("🟡 No best model saved. Saving final model manually.")
-#         model.save_pretrained(save_dir)
-
-
 def save_final_model_if_needed(model, save_dir, optimizer, scheduler):
+    """
+    Save a final Hugging Face model and training states to disk.
+    Args:
+        model : BartForConditionalGeneration
+            The trained Hugging Face BartForConditionalGeneration model to be saved using `save_pretrained`.
+
+        save_dir : str
+            Directory where the final model folder (`final_model/`) will be created.
+
+        optimizer : torch.optim.
+            The optimizer whose state dict will be saved.
+
+        scheduler : torch.optim.lr_scheduler. (default=None)
+            Learning rate scheduler whose state dict will be saved. If None,
+            scheduler state is stored as None.
+    Returns:
+
+
+    """
     final_model_dir = os.path.join(save_dir, "final_model")
     os.makedirs(final_model_dir, exist_ok=True)
 
-    print(f"💾 Saving final model to: {final_model_dir}")
+    print(f"Saving final model to: {final_model_dir}")
     model.save_pretrained(final_model_dir)
 
     torch.save(
@@ -80,7 +114,7 @@ def write_done_marker(save_dir):
     done_path = os.path.join(save_dir, "done.txt")
     with open(done_path, "w") as f:
         f.write("Training complete\n")
-    print(f"✅ Written done.txt to {done_path}")
+    print(f"Written done.txt to {done_path}")
 
 
 def is_model_done(save_dir):
@@ -90,7 +124,6 @@ def is_model_done(save_dir):
 
 def make_optimizer(model, cfg):
     lr = cfg["LEARNING_RATE"]
-    print(type(cfg["LEARNING_RATE"]), cfg["LEARNING_RATE"])
     opt = cfg["optimizer"].lower()
     if opt == "adam":
         return torch.optim.Adam(model.parameters(), lr=lr)
@@ -250,11 +283,14 @@ class ClusteredSelfiesDataset(Dataset):
         Initializes the dataset with a clustered DataFrame and a tokenizer.
 
         Args:
-            df (pandas.DataFrame): DataFrame containing at least a 'selfies' column.
-                                     (It may also contain additional columns like 'Cluster'.)
-            tokenizer: A tokenizer instance with an .encode() method.
-            mode (str): Either 'pretrain' or 'finetune'. In 'finetune' mode, additional columns
-                        (e.g., 'IC50' and 'site_name') are expected.
+            df : pd.DataFrame
+                DataFrame containing at least a 'selfies' column.
+                (It may also contain additional columns like 'Cluster'.)
+            tokenizer : transformers.PreTrainedTokenizerFast
+                A tokenizer instance with an .encode() method.
+            mode : str
+                Either 'pretrain' or 'finetune'. In 'finetune' mode, additional columns
+                (e.g., 'IC50' and 'site_name') are expected.
         """
         # Reset index to ensure integer indexing (0, 1, 2, ...)
         self.df = df.reset_index(drop=True)

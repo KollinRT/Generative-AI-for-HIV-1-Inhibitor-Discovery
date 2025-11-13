@@ -4,14 +4,19 @@ import pandas as pd
 
 import yaml
 
-
-# from fp import create_fingerprint
 from generateFingerprints import make_fingerprint_thisthat
 
 import gc  # clear memory
 
 
 def load_hyperparameters(path):
+    """
+    Args:
+        path: str
+            Path to the config yaml file
+    Returns:
+        yaml: dict
+    """
     with open(path, "r") as file:
         return yaml.safe_load(file)
 

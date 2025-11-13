@@ -17,7 +17,7 @@ SPECIAL_TOKENS = ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "<s>", "</s>"]
 # =====================
 
 # === STEP 1: Build corpus and vocab ===
-print("🔄 Generating tokenized corpus from CSV...")
+print("Generating tokenized corpus from CSV...")
 df = pd.read_csv(CSV_PATH, usecols=[SELFIES_COLUMN])
 df = df.dropna()
 
@@ -33,7 +33,7 @@ with open(CORPUS_FILE, "w") as f:
             continue
 
 # === STEP 2: Build vocab dictionary ===
-print("\n📚 Building vocabulary...")
+print("\n Building vocabulary...")
 vocab = {
     token: idx + len(SPECIAL_TOKENS)
     for idx, (token, _) in enumerate(vocab_counter.most_common())
@@ -42,7 +42,7 @@ for idx, token in enumerate(SPECIAL_TOKENS):
     vocab[token] = idx
 
 # === STEP 3: Create WordLevel tokenizer with explicit vocab ===
-print("🔧 Creating tokenizer...")
+print("Creating tokenizer...")
 model = WordLevel(vocab=vocab, unk_token="[UNK]")
 tokenizer = Tokenizer(model)
 tokenizer.pre_tokenizer = Whitespace()
@@ -60,10 +60,10 @@ hf_tokenizer = PreTrainedTokenizerFast(
 )
 
 hf_tokenizer.save_pretrained(TOKENIZER_DIR)
-print(f"\n✅ Tokenizer saved to: {TOKENIZER_DIR}")
+print(f"\n Tokenizer saved to: {TOKENIZER_DIR}")
 
 # === STEP 5: Test tokenizer on example molecule ===
-print("\n🔍 Testing tokenizer on example molecule...")
+print("\n Testing tokenizer on example molecule...")
 
 
 def selfies_encode(smiles):
@@ -95,7 +95,7 @@ print("[Method3] encode_batch.ids         →", enc_batch[0].ids)
 print("[Method3] encode_batch.tokens      →", enc_batch[0].tokens)
 
 # === STEP 6: Vocab sanity check ===
-print("\n🔎 Vocab sanity check:")
+print("\n Vocab sanity check:")
 vocab_set = hf_tokenizer.get_vocab()
 for t in tokens:
     print(f"{t}: {'FOUND' if t in vocab_set else 'MISSING'}")

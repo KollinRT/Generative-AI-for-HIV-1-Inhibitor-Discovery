@@ -36,6 +36,10 @@ def freeze_bart_layers(model, num_decoder_layers_unfrozen=1):
     - The last `num_decoder_layers_unfrozen` decoder layers
     - The LM head
     - The decoder final layer norm (if present)
+    Args:
+        model : BartForConditionalGeneration
+            Pretrained model to pass in
+        num_decoder_layers_unfrozen : int
     """
     # Freeze all parameters
     for param in model.parameters():
@@ -54,28 +58,21 @@ def freeze_bart_layers(model, num_decoder_layers_unfrozen=1):
         for param in model.model.decoder.layers[i].parameters():
             param.requires_grad = True
 
-    # ✅ SAFE: Unfreeze decoder final layer norm if it exists
+    # Unfreeze decoder final layer norm if it exists
     if hasattr(model.model.decoder, "final_layer_norm"):
         for param in model.model.decoder.final_layer_norm.parameters():
             param.requires_grad = True
 
-    # Debug print: how many parameters are trainable
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total = sum(p.numel() for p in model.parameters())
     print(
-        f"🔒 Model frozen. Trainable params: {trainable:,} / {total:,} ({100 * trainable / total:.2f}%)"
+        f"Model frozen. Trainable params: {trainable:,} / {total:,} ({100 * trainable / total:.2f}%)"
     )
 
 
 def prepare_data(args, key):
     """
     Code to prepare data for training by handling command-line arguments
-    Args:
-        args:
-        key:
-
-    Returns:
-
     """
     try:
         df = pd.read_csv(args.selfies_dataset)
@@ -115,6 +112,29 @@ def prepare_data(args, key):
 
 
 def train_for_finetune(model, train_loader, val_loader, cfg, save_dir, csv_file_path):
+    """
+    Args:
+        model : BartForConditionalGeneration
+            Model to pass in to be finetuned.
+
+        train_loader : torch.utils.data.DataLoader
+            DataLoader for pretrain set
+
+        val_loader : torch.utils.data.DataLoader
+            DataLoader for validation set
+
+        cfg : yaml dict
+            YAML file with hyperparameter dicts (e.g. hyperparameters_dict[key])
+
+        save_dir : str
+            Where to save the best model
+
+        csv_file_path : str
+            writes to the designated csv_file_path
+
+    Returns:
+
+    """
     os.makedirs(save_dir, exist_ok=True)
     csv_file = open(csv_file_path, "w", newline="")
     csv_writer = csv.writer(csv_file)
@@ -160,40 +180,14 @@ def train_for_finetune(model, train_loader, val_loader, cfg, save_dir, csv_file_
             # print(f"Labels unique values: {torch.unique(labels)}")
 
             batch = {k: v.to(device) for k, v in batch.items()}
-            # for key in ['input_ids', 'attention_mask', 'labels']:
-            #     if torch.isnan(batch[key]).any() or torch.isinf(batch[key]).any():
-            #         print(f"Warning: {key} contains NaNs or Infs")
-
-            # # optimizer.zero_grad()
-            # with autocast(device_type='cuda', enabled=use_amp):  # Use autocast context
-            #     outputs = model(input_ids=batch['input_ids'],
-            #                     attention_mask=batch['attention_mask'],
-            #                     labels=batch['labels'])
-            #     loss = outputs.loss
-
-            # if use_amp:
-            #     scaler.scale(loss).backward()
-            #     scaler.unscale_(optimizer)
-            #     clip_grad_norm_(model.parameters(), max_norm=1.0)
-            #     scaler.step(optimizer)
-            #     scaler.update()
-            # else:
-            #     loss.backward()
-            #     clip_grad_norm_(model.parameters(), max_norm=1.0)
-            #     optimizer.step()
             if use_amp:
                 with autocast("cuda"):
-                    # print(model(input_ids=batch['input_ids'],
-                    #                       attention_mask=batch['attention_mask'],
-                    #                        labels=batch['labels']))
                     outputs = model(
                         input_ids=batch["input_ids"],
                         attention_mask=batch["attention_mask"],
                         labels=batch["input_ids"],
                     )
                     loss = outputs.loss
-                    # if torch.isnan(loss) or torch.isinf(loss):
-                    #     print("Warning: NaN or Inf loss detected!")
 
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
@@ -251,11 +245,11 @@ def train_for_finetune(model, train_loader, val_loader, cfg, save_dir, csv_file_
                 "patience": patience,
             }
             torch.save(checkpoint, os.path.join(save_dir, "checkpoint_resume.pt"))
-            print(f"✅ Checkpoint saved at epoch {epoch}")
+            print(f"Checkpoint saved at epoch {epoch}")
         else:
             patience += 1
             if patience >= max_patience:
-                print(f"⏹️ Early stopping (no improvement in {max_patience} epochs)")
+                print(f"Early stopping (no improvement in {max_patience} epochs)")
                 break
 
         if scheduler:
@@ -281,17 +275,17 @@ def train_for_finetune(model, train_loader, val_loader, cfg, save_dir, csv_file_
 
 def finetune_BART(hyperparameters_dict, args, key):
     """
-    # TODO: 06/23/2025: FLESH THIS OUT
     Args:
-        hyperparameters_dict:
-        args:
-        key:
+        hyperparameters_dict : yaml dict
+            Config dict with hyperparameters for finetuning.
+        args : Not used
+        key : Key of key-value pair in hyperparameters_dict.
 
     Returns:
 
     """
     # Setup File config parameters
-    base_model_name = "skip_base"  # Customize as needed
+    base_model_name = "skip_base"
     base_config = hyperparameters_dict[base_model_name]
     current_config = hyperparameters_dict[key]
 
@@ -344,40 +338,25 @@ def finetune_BART(hyperparameters_dict, args, key):
 
     # Single model path is the 7th one...
     model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/runs/selfies_BART_PRETRAIN_model_small_lamb_earlyS_extradropout_highLR_lowThresh_or7th/model"
-    # for inputs, labels in finetune_train_loader:
-    #     print("Input shape:", inputs.shape)
-    #     print("Input max", inputs.max())
-    #     print("Input min", inputs.min())
-    #     print("Label max", labels.max())
-    #     print("Label min", labels.min())
-    #     break
-    #
-    # for inputs, labels in finetune_validation_loader:
-    #     print("Input shape:", inputs.shape)
-    #     print("Input max", inputs.max())
-    #     print("Input min", inputs.min())
-    #     print("Label max", labels.max())
-    #     print("Label min", labels.min())
-    #     break
 
     for batch in finetune_train_loader:
         inputs = batch["input_ids"]
         labels = batch["labels"]  # pre-shifted labels with -100 for ignore
-        print("Input shape:", inputs.shape)
-        print("Input max", inputs.max())
-        print("Input min", inputs.min())
-        print("Label max", labels.max())
-        print("Label min", labels.min())
+        # print("Input shape:", inputs.shape)
+        # print("Input max", inputs.max())
+        # print("Input min", inputs.min())
+        # print("Label max", labels.max())
+        # print("Label min", labels.min())
         break
 
     for batch in finetune_validation_loader:
         inputs = batch["input_ids"]
         labels = batch["labels"]  # pre-shifted labels with -100 for ignore
-        print("Input shape:", inputs.shape)
-        print("Input max", inputs.max())
-        print("Input min", inputs.min())
-        print("Label max", labels.max())
-        print("Label min", labels.min())
+        # print("Input shape:", inputs.shape)
+        # print("Input max", inputs.max())
+        # print("Input min", inputs.min())
+        # print("Label max", labels.max())
+        # print("Label min", labels.min())
         break
 
     model = BartForConditionalGeneration.from_pretrained(model_path)
@@ -387,7 +366,7 @@ def finetune_BART(hyperparameters_dict, args, key):
     print("\nTrainable parameters:")
     for name, param in model.named_parameters():
         if param.requires_grad:
-            print(f"  ✅ {name} | {param.numel()} params")
+            print(f"{name} | {param.numel()} params")
 
     for param in model.model.shared.parameters():
         param.requires_grad = False
@@ -403,9 +382,6 @@ def finetune_BART(hyperparameters_dict, args, key):
 
     decoder_start_token_id = tokenizer.bos_token_id
     output = model(input_ids=input_ids, decoder_input_ids=input_ids)
-
-    print("THIS")
-    print("Model output shape:", output.logits.shape)
 
     train_for_finetune(
         model,

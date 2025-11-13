@@ -96,8 +96,6 @@ class SelfiesDatasetRound2(Dataset):
             drop=True
         )  # Ensure indices are 0,1,2,...
 
-        # print(f"CSV columns: {self.data.columns.tolist()}")  # Debugging print statement
-        # self.tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
         self.tokenizer = tokenizer
         self.mode = mode  # Options are 'pretrain' or 'finetune'
 
@@ -108,15 +106,12 @@ class SelfiesDatasetRound2(Dataset):
     def __getitem__(self, idx):
         """Retrieve an item by index."""
         selfies_string = str(self.dataframe.iloc[idx]["selfies"])  # force cast to str
-        # selfies_string = self.dataframe.iloc[idx]['selfies']
-        # print("selfies_string:", selfies_string)
         # Correctly tokenize SELFIES using semantic splitting
         tokens = list(sf.split_selfies(selfies_string))  # ['[C]', '[C]', '[O]']
         input_ids = torch.tensor(
             self.tokenizer.convert_tokens_to_ids(tokens), dtype=torch.long
         )
 
-        # print("input_ids:", input_ids)
         # Pad/truncate to max_length (e.g., 256)
         # max_length = 256
         attention_mask = torch.ones(len(input_ids), dtype=torch.long)
@@ -167,7 +162,6 @@ class SelfiesDataset(Dataset):
         return total_len
 
     def __getitem__(self, idx):
-        # print(f"self.tokenizer.mask_token_id: {self.tokenizer.mask_token_id}")
         selfies_string = str(self.dataframe.iloc[idx]["selfies"])
 
         # Corrupt only in 'pretrain' mode
@@ -302,12 +296,18 @@ class SelfiesIterableDataset(IterableDataset):
     ):
         """
         Args:
-            parquet_path (str): Path to the Parquet file(s).
-            tokenizer: Tokenizer with convert_tokens_to_ids() and mask_token_id attributes.
-            partitions (list[int], optional): Specific partition indices to load. If None, load all partitions.
-            mode (str): 'pretrain' (corrupt input) or other modes (no corruption).
-            mask_prob (float): Probability of masking a token during corruption.
-            verbose (bool): Whether to print debug logs for each row.
+            parquet_path : str
+                Path to the Parquet file(s).
+            tokenizer : transformers.PreTrainedTokenizerFast
+                Tokenizer with convert_tokens_to_ids() and mask_token_id attributes.
+            partitions : list[int], optional
+                Specific partition indices to load. If None, load all partitions.
+            mode : str
+                'pretrain' (corrupt input) or other modes (no corruption).
+            mask_prob (float) :
+                Probability of masking a token during corruption.
+            verbose : bool
+                Whether to print debug logs for each row.
         """
         self.parquet_path = parquet_path
         self.tokenizer = tokenizer

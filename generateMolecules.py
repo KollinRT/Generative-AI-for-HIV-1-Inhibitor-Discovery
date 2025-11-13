@@ -3,17 +3,47 @@ This script is for generating molecules from the pretrained and fine-tuned model
 """
 
 from token_mapping import token_mapping
+from transformers import BartForConditionalGeneration, PreTrainedTokenizerFast
 
 
 def generate_text(
-    model, tokenizer, input_text, max_length=100, num_return_sequences=5, num_beams=5
+    model: BartForConditionalGeneration,
+    tokenizer: PreTrainedTokenizerFast,
+    input_text: str,
+    max_length: int = 100,
+    num_return_sequences: int = 5,
+    num_beams: int = 5,
 ):
+    """
+    Args:
+        model : BartForConditionalGeneration
+            The pretrained BART model used for text generation.
+
+        tokenizer : transformers.PreTrainedTokenizerFast
+            Tokenizer corresponding to the BART model.
+
+        input_text : str
+            Input prompt or sequence to condition the model generation.
+
+        max_length : int, optional (default=100)
+            Maximum length of the generated sequence.
+
+        num_return_sequences : int, optional (default=5)
+            Number of distinct sequences to return.
+
+        num_beams : int, optional (default=5)
+            Number of beams used in beam search.
+
+    Returns:
+        decoded_texts : List[str]
+        A list of generated text sequences.
+    """
     model.eval()  # Set the model to evaluation mode
 
-    # ✅ Encode input text correctly
+    # Encode input text correctly
     input_ids = tokenizer.encode(input_text, return_tensors="pt").to(model.device)
 
-    # ✅ Generate text
+    # Generate text
     outputs = model.generate(
         input_ids=input_ids,
         max_length=max_length,
@@ -21,7 +51,7 @@ def generate_text(
         num_beams=num_beams,
     )
 
-    # ✅ Decode generated text correctly
+    # Decode generated text correctly
     decoded_texts = [
         tokenizer.decode(output, skip_special_tokens=True) for output in outputs
     ]
@@ -29,29 +59,25 @@ def generate_text(
     return decoded_texts
 
 
-def benchmark_generated_molecules():
+# def benchmark_generated_molecules():
+# pass
+
+
+def load_model(model_path: str, device: str = "cuda"):
     """
-    Generate molecules using the model and tokenizer.
-    This should include novelty and uniqueness
-    Utilize the training set...
-    - _{key} will be utilized from ./data/ folder
-    - how are we marking train vs validation? This should be the same...
-    - Get the code here...
+    Args:
+        model_path : str
+            Path to the fine-tuned model directory, or a HuggingFace model identifier.
 
-    formula for novelty:
-        - here
-    formula for uniqueness:
-        - here
+        device : str, optional (default="cuda")
+            Device to load the model onto ("cuda", "cpu", or "mps").
+
+    Returns:
+        model : BartForConditionalGeneration
+            The loaded and device-mapped model.
+
 
     """
-    pass
-
-
-# TODO: NEW include sampling...
-
-
-def load_model(model_path, device="cuda"):
-    """Load the pre-trained BART model."""
     model = BartForConditionalGeneration.from_pretrained(
         model_path
     )  # Initialize the model architecture
@@ -61,6 +87,15 @@ def load_model(model_path, device="cuda"):
 
 
 def load_tokenizer(tokenizer_path):
+    """
+    Args:
+        tokenizer_path: str
+            Path to the tokenizer file directory.
+    Returns:
+        tokenizer: transformers.PretrainedTokenizerFast
+
+    """
+
     """Load the tokenizer used for both encoding and decoding."""
     tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
     return tokenizer
@@ -70,43 +105,17 @@ if __name__ == "__main__":
     import torch
     from transformers import BartForConditionalGeneration, PreTrainedTokenizerFast
 
-    # ✅ Set paths
-    # model_path = "/home/kollin/Desktop/CollectedRuns_All_And_New/CollectedRuns_All_And_New/CollectedRuns/CLUSTER_RESULTS/extra/selfies_BART_PRETRAIN_model_4/model"
-    # model_path = "/home/kollin/Desktop/ThesisBU/WIP_Thesis/runs/selfies_BART_finetune_model_4/model"
-    # model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/selfies_BART_PRETRAIN_model_4_warmup_namelater_DELETETHIS/model"
-    # model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/runs/selfies_BART_PRETRAIN_model_4_warmup_1_e-6_50/model"
-    # model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/runs/selfies_BART_PRETRAIN_model_4_warmup_30_e-6/model"
-    model_path = "/home/kollin/Desktop/ExploreThesis/WIP_Thesis/runs/selfies_BART_PRETRAIN_model_4_warmup/model"
+    # Set paths
+    model_path = "./runs/selfies_BART_PRETRAIN_model_4_warmup/model"
     model = load_model(model_path)
     # tokenizer = load_tokenizer("selfies_word_tokenizer_12M")
     tokenizer = load_tokenizer("full_tokenizer_finetune_and_pretrain")
-    # ✅ Set device
+    # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
-    # ✅ Generate text
-    # # input_text = "<s>"  # Example SELFIES input
-    # # input_text.
-    # # input_text = "[C] [C] [Branch1_1] [O][C][C][N][C][=O][C][C][Ring1][C][C][=O][O]"
-    # input_text = "[C] [C] [O]"
-    # input_text = "[C] [C] [Branch1_1] [O] [C] [C] [N] [C] [=O] [C] [C] [Ring1] [C] [C] [=O] [O]"
-    # input_text = "[C]"
+    # Generate text
     input_text = "<s>"
-    #
-    # # 1. Manual split
-    # tokens = input_text.split()
-    # print("Tokens:", tokens)
-    #
-    # # 2. Manual conversion
-    # input_ids = tokenizer.convert_tokens_to_ids(tokens)
-    # print("IDs:", input_ids)
-    #
-    # # 3. Decode
-    # decoded = tokenizer.decode(input_ids)
-    # print("Decoded:", decoded)
-    #
-    # input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(device)
-    # print(input_ids)
 
     tokens = input_text.split()  # Assumes space-delimited SELFIES tokens
     ids = tokenizer.convert_tokens_to_ids(tokens)
@@ -119,37 +128,24 @@ if __name__ == "__main__":
         input_ids,
         max_length=32,
         num_return_sequences=50,
-        do_sample=True,  # ✅ Enable sampling (adds randomness)
-        temperature=1.0,  # ✅ Increase randomness (higher values = more diverse outputs)
-        top_k=50,  # ✅ Consider only top 50 most likely next tokens
-        top_p=0.95,  # ✅ Use nucleus sampling (focus on probable tokens)
-        repetition_penalty=1.0,  # ✅ Penalize repetitive phrases
-        num_beams=50,  # ✅ Disable beam search (prevents deterministic output)
+        do_sample=True,  # Enable sampling (adds randomness)
+        temperature=1.0,  # Increase randomness (higher values = more diverse outputs)
+        top_k=50,  # Consider only top 50 most likely next tokens
+        top_p=0.95,  # Use nucleus sampling (focus on probable tokens)
+        repetition_penalty=1.0,  # Penalize repetitive phrases
+        num_beams=50,  # Disable beam search (prevents deterministic output)
     )
 
     generated_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-    # generated_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 
-    # ✅ Apply token mapping to each token before constructing the final SELFIES string
+    # Apply token mapping to each token before constructing the final SELFIES string
     cleaned_selfies = []
     for text in generated_texts:
         tokens = text.strip().split()  # Token-level split
 
-        # Debug again
-        print("tokens:\n")
-        print(tokens)
         mapped_tokens = [
             token_mapping.get(tok, tok) for tok in tokens
         ]  # Use mapping; fallback to original if not found
 
-        # Debug
-        print("mapped_tokens:\n")
-        print(mapped_tokens)
         selfies_string = "".join(mapped_tokens)
         cleaned_selfies.append(selfies_string)
-
-    print("Generated Texts:", generated_texts)
-    print("Cleaned SELFIES:", cleaned_selfies)
-
-    print("Generated Texts:", generated_texts)
-    print(cleaned_selfies)

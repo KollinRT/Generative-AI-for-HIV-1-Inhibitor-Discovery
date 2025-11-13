@@ -7,21 +7,19 @@ def cluster_molecules(df, output_csv, num_perm=256, lsh_threshold=0.7):
     """
     Clusters molecules based on precomputed fingerprint bit strings using MinHashLSH.
 
-    Parameters:
-    -----------
-    df : pandas.DataFrame
-        DataFrame that must contain a 'Fingerprint' column with fingerprint bit strings.
-    output_csv : str
-        Path to save the output CSV with cluster assignments.
-    num_perm : int, optional (default=256)
-        Number of permutations for MinHash (more permutations → higher accuracy but slower).
-    lsh_threshold : float, optional (default=0.7)
-        LSH similarity threshold (approximate Tanimoto/Jaccard similarity).
+    Args:
+        df : pd.DataFrame
+            DataFrame that must contain a 'Fingerprint' column with fingerprint bit strings.
+        output_csv : str
+            Path to save the output CSV with cluster assignments.
+        num_perm : int, optional (default=256)
+            Number of permutations for MinHash (more permutations → higher accuracy but slower).
+        lsh_threshold : float, optional (default=0.7)
+            LSH similarity threshold (approximate Tanimoto/Jaccard similarity).
 
-    Returns:
-    --------
-    df_with_clusters : pandas.DataFrame
-        The original DataFrame with an added 'Cluster' column.
+    Return:
+        df_with_clusters : pandas.DataFrame
+            The original DataFrame with an added 'Cluster' column.
     """
 
     def bitstring_to_set(bitstring):
@@ -29,7 +27,6 @@ def cluster_molecules(df, output_csv, num_perm=256, lsh_threshold=0.7):
         return {i for i, bit in enumerate(bitstring) if bit == "1"}
 
     n = len(df)
-    print(f"Total number of molecules: {n}")
 
     # 1. Create MinHash signatures from the fingerprint bit strings.
     start = time.time()
