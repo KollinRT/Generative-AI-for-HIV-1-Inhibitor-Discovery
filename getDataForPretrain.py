@@ -1,12 +1,8 @@
-# TODO: NEW Rename getDataForPretrain.py... the finetune doesn't get filtered down...
-# Add filter for criteria...
-
 import pymysql
 import pymysql.cursors
 from rdkit import Chem
 from rdkit.Chem import Draw, Descriptors
 
-# from rdkit.Chem import Descriptors
 import matplotlib.pyplot as plt
 import csv
 import logging
