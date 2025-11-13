@@ -7,7 +7,7 @@ max_selfies_length = embed_length - 2  # Account for BOS and EOS tokens
 
 # Load the dataset
 df = pd.read_csv("combined_selfies_dataset.csv")
-#df = pd.read_csv("combined_selfies_dataset_pretrain.csv")
+# df = pd.read_csv("combined_selfies_dataset_pretrain.csv")
 
 # Make sure whole column is just string
 df["selfies"] = df["selfies"].astype(str)
@@ -32,8 +32,12 @@ df_cleaned = df[df["selfies_length"] <= max_selfies_length]
 df_cleaned = df_cleaned[["selfies"]]
 
 # Save the cleaned dataset
-df_cleaned.to_csv(f"./combined_selfies_dataset_embedding_{str(embed_length)}.csv", index=False)
+df_cleaned.to_csv(
+    f"./combined_selfies_dataset_embedding_{str(embed_length)}.csv", index=False
+)
 
-print(f"Filtered dataset saved. Original size: {len(df)}, Cleaned size: {len(df_cleaned)}")
+print(
+    f"Filtered dataset saved. Original size: {len(df)}, Cleaned size: {len(df_cleaned)}"
+)
 
 # combined_selfies_dataset_embedding_514

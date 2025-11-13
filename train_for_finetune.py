@@ -67,11 +67,11 @@ def freeze_bart_layers(model, num_decoder_layers_unfrozen=1):
     )
 
 
-def prepare_data(args, key):  
+def prepare_data(args, key):
     """
     Code to prepare data for training by handling command-line arguments
     Args:
-        args: 
+        args:
         key:
 
     Returns:
@@ -101,9 +101,7 @@ def prepare_data(args, key):
                 save_to=args.prepared_data_path,
             )  # prepared_data_path is where the selfies by itself goes
         else:
-            create_selfies_file(
-                df, do_subset=False, save_to=args.prepared_data_path
-            )  
+            create_selfies_file(df, do_subset=False, save_to=args.prepared_data_path)
     print("SELFIES .txt is ready for tokenization.")
 
     print("Creating file for training!")
@@ -451,9 +449,7 @@ def main():
 
     hyperparameters = load_hyperparameters(args.hyperparameters_path)
     print("Loaded hyperparameters:", hyperparameters)
-    bart_hyperparameters = hyperparameters.get(
-        "BART", {}
-    ) 
+    bart_hyperparameters = hyperparameters.get("BART", {})
     print("BART hyperparameters:", bart_hyperparameters)
 
     for key in bart_hyperparameters.keys():

@@ -41,8 +41,10 @@ with open(CORPUS_FILE, "w") as f:
 
 # === STEP 2: Build vocab dictionary ===
 print("\n📚 Building vocabulary...")
-vocab = {token: idx + len(SPECIAL_TOKENS)
-         for idx, (token, _) in enumerate(vocab_counter.most_common())}
+vocab = {
+    token: idx + len(SPECIAL_TOKENS)
+    for idx, (token, _) in enumerate(vocab_counter.most_common())
+}
 for idx, token in enumerate(SPECIAL_TOKENS):
     vocab[token] = idx
 
@@ -70,10 +72,12 @@ print(f"\n✅ Tokenizer saved to: {TOKENIZER_DIR}")
 # === STEP 5: Test tokenizer ===
 print("\n🔍 Testing tokenizer on example molecule...")
 
+
 def selfies_encode(smiles):
     selfies = sf.encoder(smiles)
     tokens = list(sf.split_selfies(selfies))
     return selfies, tokens
+
 
 example_smiles = "CCO"
 selfies_str, tokens = selfies_encode(example_smiles)
@@ -102,4 +106,3 @@ print("\n🔎 Vocab sanity check:")
 vocab_set = hf_tokenizer.get_vocab()
 for t in tokens:
     print(f"{t}: {'FOUND' if t in vocab_set else 'MISSING'}")
-

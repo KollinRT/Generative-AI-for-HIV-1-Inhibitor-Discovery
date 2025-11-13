@@ -85,14 +85,16 @@ def collate_fn(batch, mode="fine"):
 
     return batch_dict
 
+
 class SelfiesDatasetRound2(Dataset):
     # def __init__(self, csv_file, tokenizer_path, mode='pretrain'):
-    def __init__(self, dataframe, tokenizer, mode='pretrain'):
+    def __init__(self, dataframe, tokenizer, mode="pretrain"):
         """Initialize the dataset, loading data from CSV, setting up tokenizer and mode."""
         # self.data = pd.read_csv(csv_file)
         # self.data = dataframe
-        self.dataframe = dataframe.reset_index(drop=True)  # Ensure indices are 0,1,2,...
-
+        self.dataframe = dataframe.reset_index(
+            drop=True
+        )  # Ensure indices are 0,1,2,...
 
         # print(f"CSV columns: {self.data.columns.tolist()}")  # Debugging print statement
         # self.tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
@@ -105,31 +107,32 @@ class SelfiesDatasetRound2(Dataset):
 
     def __getitem__(self, idx):
         """Retrieve an item by index."""
-        selfies_string = str(self.dataframe.iloc[idx]['selfies'])  # force cast to str
-        #selfies_string = self.dataframe.iloc[idx]['selfies']
-        #print("selfies_string:", selfies_string)
+        selfies_string = str(self.dataframe.iloc[idx]["selfies"])  # force cast to str
+        # selfies_string = self.dataframe.iloc[idx]['selfies']
+        # print("selfies_string:", selfies_string)
         # Correctly tokenize SELFIES using semantic splitting
         tokens = list(sf.split_selfies(selfies_string))  # ['[C]', '[C]', '[O]']
-        input_ids = torch.tensor(self.tokenizer.convert_tokens_to_ids(tokens), dtype=torch.long)
+        input_ids = torch.tensor(
+            self.tokenizer.convert_tokens_to_ids(tokens), dtype=torch.long
+        )
 
-        #print("input_ids:", input_ids)
+        # print("input_ids:", input_ids)
         # Pad/truncate to max_length (e.g., 256)
         # max_length = 256
         attention_mask = torch.ones(len(input_ids), dtype=torch.long)
         #
 
-        sample = {
-            'input_ids': input_ids,
-            'attention_mask': attention_mask
-        }
+        sample = {"input_ids": input_ids, "attention_mask": attention_mask}
         return sample
 
     def encode_inhibition_site(self, inhibition_site):
         """Encodes the inhibition site after normalizing string to prevent matching errors."""
-        inhibition_site = inhibition_site.strip().upper()  # Normalize by trimming spaces and converting to uppercase
-        if 'RVP' in inhibition_site:
+        inhibition_site = (
+            inhibition_site.strip().upper()
+        )  # Normalize by trimming spaces and converting to uppercase
+        if "RVP" in inhibition_site:
             return 0
-        elif 'RVE' in inhibition_site:
+        elif "RVE" in inhibition_site:
             return 1
         return -1  # Return -1 for cases where neither RVP nor RVE is found
 

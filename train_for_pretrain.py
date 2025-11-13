@@ -26,14 +26,19 @@ from transformers import (
     PreTrainedTokenizerFast,
 )
 
-from SelfiesDataHandler import collate_fn, SelfiesIterableDataset, SelfiesDataset, SelfiesDatasetRound2
+from SelfiesDataHandler import (
+    collate_fn,
+    SelfiesIterableDataset,
+    SelfiesDataset,
+    SelfiesDatasetRound2,
+)
 from utils import (
     save_final_model_if_needed,
     write_done_marker,
     make_optimizer,
     load_hyperparameters,
     make_scheduler_steps,
-    make_scheduler
+    make_scheduler,
 )
 
 # BACKUP_EVERY_BATCH = 400
@@ -106,6 +111,7 @@ def run_validation_batched(
     avg_val_loss: float = total_val_loss / batches_seen
     return avg_val_loss
 
+
 def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_path):
     """
     model        : a BartForConditionalGeneration
@@ -129,7 +135,7 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     optimizer = make_optimizer(model, cfg)
     scheduler = make_scheduler(optimizer, cfg, len(train_loader), cfg["TRAIN_EPOCHS"])
 
-    best_val_loss = float('inf')
+    best_val_loss = float("inf")
     # Check for checkpoint
     checkpoint_path = os.path.join(save_dir, "checkpoint_resume.pt")
     start_epoch = 1
@@ -149,7 +155,7 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
     thresh = cfg["early_stopping_threshold"]
     max_patience = cfg["early_stopping_patience"]
 
-    use_amp = (gpu_used == "B200")
+    use_amp = gpu_used == "B200"
     scaler = GradScaler("cuda") if use_amp else None
 
     for epoch in range(start_epoch, cfg["TRAIN_EPOCHS"] + 1):
@@ -162,9 +168,11 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
 
             if use_amp:
                 with autocast("cuda"):
-                    outputs = model(input_ids=batch['input_ids'],
-                                    attention_mask=batch['attention_mask'],
-                                    labels=batch['input_ids'])
+                    outputs = model(
+                        input_ids=batch["input_ids"],
+                        attention_mask=batch["attention_mask"],
+                        labels=batch["input_ids"],
+                    )
                     loss = outputs.loss
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
@@ -172,9 +180,11 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
                 scaler.step(optimizer)
                 scaler.update()
             else:
-                outputs = model(input_ids=batch['input_ids'],
-                                attention_mask=batch['attention_mask'],
-                                labels=batch['input_ids'])
+                outputs = model(
+                    input_ids=batch["input_ids"],
+                    attention_mask=batch["attention_mask"],
+                    labels=batch["input_ids"],
+                )
                 loss = outputs.loss
                 loss.backward()
                 clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -196,9 +206,11 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
             # for batch in val_loader:
             for batch in tqdm(val_loader, desc=f"Epoch {epoch} [val]"):
                 batch = {k: v.to(device) for k, v in batch.items()}
-                loss = model(input_ids=batch['input_ids'],
-                             attention_mask=batch['attention_mask'],
-                             labels=batch['input_ids']).loss
+                loss = model(
+                    input_ids=batch["input_ids"],
+                    attention_mask=batch["attention_mask"],
+                    labels=batch["input_ids"],
+                ).loss
                 total_val_loss += loss.item()
 
         avg_val_loss = total_val_loss / len(val_loader)
@@ -233,10 +245,14 @@ def train_for_pretrain(model, train_loader, val_loader, cfg, save_dir, csv_file_
                 scheduler.step()
 
         #     Logging
-        current_lr = optimizer.param_groups[0]['lr']
-        print(f"[Epoch {epoch}] train_loss={avg_train_loss:.4f}  "
-              f"val_loss={avg_val_loss:.4f}  lr={current_lr:.2E}")
-        csv_writer.writerow([epoch, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"])
+        current_lr = optimizer.param_groups[0]["lr"]
+        print(
+            f"[Epoch {epoch}] train_loss={avg_train_loss:.4f}  "
+            f"val_loss={avg_val_loss:.4f}  lr={current_lr:.2E}"
+        )
+        csv_writer.writerow(
+            [epoch, f"{avg_train_loss:.6f}", f"{avg_val_loss:.6f}", f"{current_lr:.2E}"]
+        )
         csv_file.flush()
 
     # close the CSV file now that training (or early stop) is done
@@ -270,7 +286,7 @@ def train_for_pretrain_steps(
     max_patience: int = cfg["early_stopping_patience"]
     max_valid_batches: Optional[int] = cfg.get("MAX_VALID_BATCH_SIZE")
 
-    # Setup 
+    # Setup
     train_iterator: Iterator[BatchDict] = itertools.cycle(
         train_loader
     )  # Infinite looping
@@ -300,7 +316,7 @@ def train_for_pretrain_steps(
 
     scheduler = make_scheduler_steps(optimizer, cfg, max_training_steps)
 
-    # Checkpoint Resume 
+    # Checkpoint Resume
     # Check for checkpoint
     checkpoint_path: str = os.path.join(save_dir, "checkpoint_resume.pt")
     global_step: int = 0
@@ -335,7 +351,7 @@ def train_for_pretrain_steps(
         # Back to config setup
         patience = 0
 
-    # Mixed Precision 
+    # Mixed Precision
     use_amp: bool = gpu_used == "B200"
     scaler: Optional[GradScaler] = GradScaler("cuda") if use_amp else None
 
@@ -496,7 +512,7 @@ def train_for_pretrain_steps(
                 step_in_epoch = 0
                 pbar.update(1)  # update tqdm bar
 
-    # Training Complete 
+    # Training Complete
     csv_file.close()
 
     # Save final model separately
@@ -568,8 +584,6 @@ def prepare_data(args: argparse.Namespace, key: str) -> None:
             f"./model_name_{key}.csv", f"./data/trainable_selfies_{key}.csv"
         )
     print(f"File for training is ready! (trainable_selfies_{key}.csv)")
-
-
 
 
 # def pretrain_BART(
@@ -709,6 +723,7 @@ def prepare_data(args: argparse.Namespace, key: str) -> None:
 #         csv_file_path,
 #     )
 
+
 def pretrain_BART(hyperparameters_dict, args, key):
     """
     Args:
@@ -734,7 +749,9 @@ def pretrain_BART(hyperparameters_dict, args, key):
 
     # Load the tokenizer
     # tokenizer = PreTrainedTokenizerFast.from_pretrained("./selfies_word_tokenizer")
-    tokenizer = PreTrainedTokenizerFast.from_pretrained("./code_run_files/full_tokenizer_finetune_and_pretrain")
+    tokenizer = PreTrainedTokenizerFast.from_pretrained(
+        "./code_run_files/full_tokenizer_finetune_and_pretrain"
+    )
 
     # Load DF and Cluster
     # Load and process the DataFrame: apply fingerprinting and clustering
@@ -754,43 +771,61 @@ def pretrain_BART(hyperparameters_dict, args, key):
     valid_df = valid_df.sample(frac=1, random_state=42).reset_index(drop=True)
 
     # Instead of passing the raw DataFrame to DataLoader, wrap it in the new ClusteredSelfiesDataset
-    train_dataset = SelfiesDatasetRound2(train_df, tokenizer, mode='pretrain')
-    valid_dataset = SelfiesDatasetRound2(valid_df, tokenizer, mode='pretrain')
+    train_dataset = SelfiesDatasetRound2(train_df, tokenizer, mode="pretrain")
+    valid_dataset = SelfiesDatasetRound2(valid_df, tokenizer, mode="pretrain")
 
-    use_amp = (gpu_used == "B200")
+    use_amp = gpu_used == "B200"
     if use_amp:
         # B200
-        pretrain_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True,
-                                     collate_fn=lambda x: collate_fn(x, mode='pre'),
-                                     num_workers=8, pin_memory=True
-                                     )
-        val_loader = DataLoader(valid_dataset, batch_size=val_batch_size, shuffle=True,
-                                collate_fn=lambda x: collate_fn(x, mode='pre'),
-                                num_workers=8, pin_memory=True
-                                )
+        pretrain_loader = DataLoader(
+            train_dataset,
+            batch_size=train_batch_size,
+            shuffle=True,
+            collate_fn=lambda x: collate_fn(x, mode="pre"),
+            num_workers=8,
+            pin_memory=True,
+        )
+        val_loader = DataLoader(
+            valid_dataset,
+            batch_size=val_batch_size,
+            shuffle=True,
+            collate_fn=lambda x: collate_fn(x, mode="pre"),
+            num_workers=8,
+            pin_memory=True,
+        )
     # 4090
     else:
-        pretrain_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True,
-                                     collate_fn=lambda x: collate_fn(x, mode='pre')
-                                     )
-        val_loader = DataLoader(valid_dataset, batch_size=val_batch_size, shuffle=True,
-                                collate_fn=lambda x: collate_fn(x, mode='pre')
-                                )
+        pretrain_loader = DataLoader(
+            train_dataset,
+            batch_size=train_batch_size,
+            shuffle=True,
+            collate_fn=lambda x: collate_fn(x, mode="pre"),
+        )
+        val_loader = DataLoader(
+            valid_dataset,
+            batch_size=val_batch_size,
+            shuffle=True,
+            collate_fn=lambda x: collate_fn(x, mode="pre"),
+        )
 
     config = BartConfig(
         vocab_size=tokenizer.vocab_size,
         max_position_embeddings=hyperparameters_dict[key]["MAX_POSITION_EMBEDDINGS"],
         encoder_layers=hyperparameters_dict[key]["ENCODER_LAYERS"],
         decoder_layers=hyperparameters_dict[key]["DECODER_LAYERS"],
-        encoder_attention_heads=hyperparameters_dict[key]["NUM_ENCODER_ATTENTION_HEADS"],
-        decoder_attention_heads=hyperparameters_dict[key]["NUM_DECODER_ATTENTION_HEADS"],
+        encoder_attention_heads=hyperparameters_dict[key][
+            "NUM_ENCODER_ATTENTION_HEADS"
+        ],
+        decoder_attention_heads=hyperparameters_dict[key][
+            "NUM_DECODER_ATTENTION_HEADS"
+        ],
         encoder_ffn_dim=hyperparameters_dict[key]["ENCODER_FFN_DIM"],
         decoder_ffn_dim=hyperparameters_dict[key]["DECODER_FFN_DIM"],
         hidden_size=hyperparameters_dict[key]["HIDDEN_SIZE"],
         pad_token_id=tokenizer.pad_token_id,
         bos_token_id=tokenizer.bos_token_id,
         eos_token_id=tokenizer.eos_token_id,
-        mask_token_id=tokenizer.mask_token_id
+        mask_token_id=tokenizer.mask_token_id,
     )
     model = BartForConditionalGeneration(config)
     # model = torch.compile(model)
@@ -800,7 +835,14 @@ def pretrain_BART(hyperparameters_dict, args, key):
     print(train_df.head(2))
 
     # Training Loop START
-    train_for_pretrain(model, pretrain_loader, val_loader, current_config, model_save_dir, csv_file_path)
+    train_for_pretrain(
+        model,
+        pretrain_loader,
+        val_loader,
+        current_config,
+        model_save_dir,
+        csv_file_path,
+    )
 
 
 def pretrain_BART_steps(
@@ -932,6 +974,7 @@ def pretrain_BART_steps(
         csv_file_path,
     )
 
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -962,14 +1005,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--steps",
-        action='store_true',
+        action="store_true",
     )
     args = parser.parse_args()
 
     hyperparameters: Mapping[str, Any] = load_hyperparameters(args.hyperparameters_path)
-    print(
-        "Loaded hyperparameters:", hyperparameters
-    ) 
+    print("Loaded hyperparameters:", hyperparameters)
     bart_hyperparameters = hyperparameters.get("BART", {})
     print("BART hyperparameters:", bart_hyperparameters)
 
@@ -996,7 +1037,7 @@ def main() -> None:
             # prepare_data(args, key)
             if args.steps:
                 pretrain_BART_steps(bart_hyperparameters, args, key)
-            else: 
+            else:
                 pretrain_BART(bart_hyperparameters, args, key)
 
 

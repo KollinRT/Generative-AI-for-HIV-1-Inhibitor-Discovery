@@ -9,10 +9,10 @@ from tokenizers.pre_tokenizers import Whitespace
 from transformers import PreTrainedTokenizerFast
 
 # ====== CONFIG ======
-CSV_PATH = "combined_selfies_dataset.csv"          # Path to your CSV file
-SELFIES_COLUMN = "selfies"               # Column name containing SELFIES strings
-CORPUS_FILE = "selfies_token_corpus_12M.txt" # Intermediate corpus file
-TOKENIZER_DIR = "selfies_word_tokenizer_12M" # Output directory
+CSV_PATH = "combined_selfies_dataset.csv"  # Path to your CSV file
+SELFIES_COLUMN = "selfies"  # Column name containing SELFIES strings
+CORPUS_FILE = "selfies_token_corpus_12M.txt"  # Intermediate corpus file
+TOKENIZER_DIR = "selfies_word_tokenizer_12M"  # Output directory
 SPECIAL_TOKENS = ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "<s>", "</s>"]
 # =====================
 
@@ -34,8 +34,10 @@ with open(CORPUS_FILE, "w") as f:
 
 # === STEP 2: Build vocab dictionary ===
 print("\n📚 Building vocabulary...")
-vocab = {token: idx + len(SPECIAL_TOKENS)
-         for idx, (token, _) in enumerate(vocab_counter.most_common())}
+vocab = {
+    token: idx + len(SPECIAL_TOKENS)
+    for idx, (token, _) in enumerate(vocab_counter.most_common())
+}
 for idx, token in enumerate(SPECIAL_TOKENS):
     vocab[token] = idx
 
@@ -63,10 +65,12 @@ print(f"\n✅ Tokenizer saved to: {TOKENIZER_DIR}")
 # === STEP 5: Test tokenizer on example molecule ===
 print("\n🔍 Testing tokenizer on example molecule...")
 
+
 def selfies_encode(smiles):
     selfies = sf.encoder(smiles)
     tokens = list(sf.split_selfies(selfies))
     return selfies, tokens
+
 
 example_smiles = "CCO"
 selfies_str, tokens = selfies_encode(example_smiles)

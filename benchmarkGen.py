@@ -217,10 +217,11 @@ class HuggingFaceMoleculeGenerator:
         ids_from_strings: List[Optional[int]] = []
         if forbidden_tokens:
             ids_from_strings = self.tokenizer.convert_tokens_to_ids(forbidden_tokens)
-        cleaned_from_strings: List[int] = \
-            [
-            i for i in ids_from_strings if i is not None and i != self.tokenizer.unk_token_id
-            ]
+        cleaned_from_strings: List[int] = [
+            i
+            for i in ids_from_strings
+            if i is not None and i != self.tokenizer.unk_token_id
+        ]
         self.forbidden_token_ids: Set[int] = set((forbidden_token_ids or [])) | set(
             cleaned_from_strings
         )
@@ -919,7 +920,6 @@ if __name__ == "__main__":
         scaffold_sequences=scaffolds,
         scaffold_bias=4.0,  # try 2–6; increase to strengthen the bias
     )
-
 
     start_time = time.time()
 

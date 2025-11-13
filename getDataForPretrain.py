@@ -27,10 +27,7 @@ logging.basicConfig(
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
-    "--parallel",
-    action="store_true",
-    default=False,
-    help="Use parallel processing"
+    "--parallel", action="store_true", default=False, help="Use parallel processing"
 )
 # now for yaml file
 parser.add_argument(
@@ -39,12 +36,7 @@ parser.add_argument(
     help="YAML file path for config stuffs",
     metavar="/path/to/hyperparameters/*.yml",
 )
-parser.add_argument(
-    "--round",
-    default="1",
-    type=str,
-    help="Round 1 or 2/3"
-)
+parser.add_argument("--round", default="1", type=str, help="Round 1 or 2/3")
 args = parser.parse_args()
 
 
@@ -59,6 +51,7 @@ with open(yaml_file, "r") as file:
 
 pymysql_info = data["pymysql_info"]
 
+
 # --------------------------------------------------------------------------- #
 #  Helper: DB connection
 # --------------------------------------------------------------------------- #
@@ -72,6 +65,8 @@ def create_db_connection():
         cursorclass=pymysql.cursors.DictCursor,
     )
     return connection
+
+
 # --------------------------------------------------------------------------- #
 #  SQL helpers
 # --------------------------------------------------------------------------- #
@@ -91,10 +86,12 @@ def execute_sql_query(query):
     finally:
         connection.close()
 
+
 # --------------------------------------------------------------------------- #
 #  ChEMBL query - Arg passed for optional differentiation
 # --------------------------------------------------------------------------- #
 if args.round == "1":
+
     def query_chembl(excluded_tids):
         query = """
         SELECT DISTINCT cs.canonical_smiles
@@ -114,6 +111,7 @@ if args.round == "1":
         finally:
             connection.close()
 elif args.round == "2" or args.round == "3":
+
     def query_chembl(excluded_tids):
         query = """
         SELECT DISTINCT cs.canonical_smiles
@@ -131,8 +129,9 @@ elif args.round == "2" or args.round == "3":
         finally:
             connection.close()
 
+
 #  ------------------------------------------------------------------ #
-#  Compute descriptors 
+#  Compute descriptors
 #  ------------------------------------------------------------------ #
 def compute_properties(row):
     from rdkit import Chem
@@ -176,6 +175,7 @@ def finetune_query_chembl(excluded_tids):
     """
     return execute_sql_query(query)  # 6877 for both
 
+
 # Function to draw SMILES
 def draw_smiles(smiles_list):
     mols = [Chem.MolFromSmiles(smile) for smile in smiles_list]
@@ -193,7 +193,7 @@ def save_smiles_to_csv(smiles_list, filename="vocab_smiles_data_TEST.csv"):
             "canonical_smiles",
             "IC50",
             "site_name",
-        ]  
+        ]
     with open(filename, "w", newline="") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=headers)
         writer.writeheader()  # Write the header for the columns
@@ -242,6 +242,7 @@ properties_df = pd.DataFrame(properties_series.tolist())
 print(type(properties_df))
 
 properties_df.to_csv("./vocab_smiles_data_TEST_properties.csv", index=False)
+
 
 def filter_properties(properties_df, model_name, filters):
     # Filter the DataFrame based on the hyperparameters

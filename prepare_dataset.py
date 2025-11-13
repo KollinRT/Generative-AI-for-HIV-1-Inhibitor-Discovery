@@ -24,7 +24,8 @@ def convert_to_selfies(smiles_string, index=None):
         logging.info(
             f"EncoderError in Conversion at index {index} for SMILES: {smiles_string}"
         )
-        return None 
+        return None
+
 
 # Inspired by https://github.com/HUBioDataLab/SELFormer/blob/main/prepare_pretraining_data.py
 # def prepare_dataset_for_pretrain(path="data/smiles.txt", save_to="data/selfies_ready.csv"):
@@ -99,8 +100,6 @@ def get_selfies_only(path, save_to):
     df = pd.read_csv(path)
     selfies_column = df.selfies
     selfies_column.to_csv(save_to, index=False)
-
-
 
 
 # def bpe_tokenizer(

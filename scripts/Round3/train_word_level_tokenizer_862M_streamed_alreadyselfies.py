@@ -23,6 +23,7 @@ print("🔄 Streaming Parquet partitions and generating tokenized corpus...")
 df_dask = dd.read_parquet(PARQUET_PATH, columns=[SELFIES_COLUMN])
 df_dask = df_dask.dropna(subset=[SELFIES_COLUMN])
 
+
 # === STEP 2: Define partition processing (NO encoding/decoding) ===
 def process_partition(df_partition):
     local_counter = Counter()
@@ -35,6 +36,7 @@ def process_partition(df_partition):
         except Exception:
             continue
     return local_counter, lines
+
 
 # === STEP 3: Schedule partitions for parallel processing ===
 tasks = []
@@ -56,8 +58,10 @@ with open(CORPUS_FILE, "w") as f:
 
 # === STEP 6: Build vocab dictionary ===
 print("\n📚 Building vocabulary...")
-vocab = {token: idx + len(SPECIAL_TOKENS)
-         for idx, (token, _) in enumerate(vocab_counter.most_common())}
+vocab = {
+    token: idx + len(SPECIAL_TOKENS)
+    for idx, (token, _) in enumerate(vocab_counter.most_common())
+}
 for idx, token in enumerate(SPECIAL_TOKENS):
     vocab[token] = idx
 
@@ -108,4 +112,3 @@ print("\n🔎 Vocab sanity check:")
 vocab_set = hf_tokenizer.get_vocab()
 for t in tokens:
     print(f"{t}: {'FOUND' if t in vocab_set else 'MISSING'}")
-

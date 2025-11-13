@@ -10,4 +10,6 @@ combined_df = pd.concat([df1, df2], ignore_index=True)
 # Save to a new file (or overwrite the first)
 combined_df.to_csv("combined_selfies_dataset_pretrain.csv", index=False)
 
-print("✅ Files successfully combined and saved as combined_selfies_dataset_pretrain.csv")
+print(
+    "✅ Files successfully combined and saved as combined_selfies_dataset_pretrain.csv"
+)

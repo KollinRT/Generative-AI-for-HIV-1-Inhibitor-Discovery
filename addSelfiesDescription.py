@@ -32,9 +32,7 @@ if __name__ == "__main__":
     pandarallel.initialize()
 
     hyperparameters = load_hyperparameters(args.hyperparameters_path)
-    print(
-        "Loaded hyperparameters:", hyperparameters
-    )
+    print("Loaded hyperparameters:", hyperparameters)
     bart_hyperparameters = hyperparameters.get("BART", {})
     print("BART hyperparameters:", bart_hyperparameters)
 
@@ -47,4 +45,3 @@ if __name__ == "__main__":
         df["selfies"] = df[f"{args.smiles_column}"].parallel_apply(convert_to_selfies)
 
         df.to_csv(f"{csv_file[:-4]}_selfies.csv")
-        

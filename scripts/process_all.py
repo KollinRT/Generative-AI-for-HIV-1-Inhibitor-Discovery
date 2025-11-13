@@ -3,13 +3,15 @@ from tqdm import tqdm
 import selfies as sf
 from rdkit import Chem
 
+
 # Read SMILES and ZINC ID
 def read_smiles_file(filename):
-    with open(filename, 'r') as f:
+    with open(filename, "r") as f:
         for line in f:
             parts = line.strip().split()
             if len(parts) == 2:
                 yield parts[0], parts[1]
+
 
 # Convert to SELFIES
 def process_smiles(smiles, zinc_id):
@@ -18,9 +20,10 @@ def process_smiles(smiles, zinc_id):
         if mol is None:
             return None
         selfies_str = sf.encoder(smiles)
-        return {'smiles': smiles, 'zinc_id': zinc_id, 'selfies': selfies_str}
+        return {"smiles": smiles, "zinc_id": zinc_id, "selfies": selfies_str}
     except Exception:
         return None
+
 
 # Process and store
 data = []
@@ -32,4 +35,3 @@ for smiles, zinc_id in tqdm(read_smiles_file("zinc15_all_raw.smi"), total=10_000
 # Save to CSV
 df = pd.DataFrame(data)
 df.to_csv("zinc15_all_selfies.csv", index=False)
-
