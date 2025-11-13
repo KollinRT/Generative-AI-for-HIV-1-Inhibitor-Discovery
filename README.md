@@ -1,4 +1,4 @@
-### Tech Specs
+## Tech Specs
 Intel Core i9-13900KF Processor (24 core (8P/16E)/32 Threads)  
 64 GB RAM 4800 MHz  
 RTX 4090 24GB VRAM  
@@ -146,10 +146,12 @@ This will populate the `chembl_35` database inside our container.
 Click the 3x3 dots button <img src="./images/ZINC15_dots.png" width="25" height="25"> and click the Druglike filter and click off of 5 on left and 500 on top. This will get the data in download that can be downloaded with a script via WGET. Run that script in the data directory to generate the data.
 
 or use the existing [File in repo](./scripts/download_zinc.sh)
+
 ```bash
-bash download_zinc.sh
+sh /scripts/download_zinc.sh
 ```
-And let the whole file directory download. Much like the ChEMBL DB population, this might take several hours so please set time aside to accommodate this.
+From the directory you want the data stored in. I suggest `/data`.
+Now, let the whole file directory download. Much like the ChEMBL DB population, this might take several hours so please set time aside to accommodate this.
 
 ### Get Round 2 Data 10M
 Once the data is in the directory needed we can run the script `combine_zinc15.sh` which will combine all the ZINC15 `*.smi` files so that we can then sample 10M for Round 2.
@@ -170,22 +172,13 @@ Then once the data is collected and translated to SELFIES via `process_10M_paral
 
 Then from here we can combine the 10M sampled with the 2.3M pretrained molecules to then do fingerprints and clustering. However, this will have to be done on a larger system as more RAM is needed. More work could be done into finding or creating a more efficient scheme for memory-efficient big data fingerprint clustering but this was not needed at the time of experimentation since a higher RAM memory machine could be obtained for fairly cheap. There are more recent options for clustering that seem to fare well such as [BitBIRCH](https://github.com/mqcomplab/bitbirch) but this publisted after the work was already carried out and didn't seem to impact appreciably.
 
-### Get Round 3 Data ~860M
+### Get Round 3 Data ~860M Molecules
 Getting the data for Round 3 is done through downloading the data from the ZINC15 tranches as described in the section above. Then take the data and mix them all into one data source just like in Round 2.
 
-Obtain data for Rounds 2 and 3:
+Then we need to work to process the ~860M ZINC15 druglike molecules:
+`process_in_chunk.py` is utilized to make 860 1M molecules file to then process into a parquet file. This parquet file will interact with Dask in order to utilize the big data streaming for Round 3.
 
-```bash
-sh ExploreThesis/WIP_Thesis/scripts/download_zinc.sh
-```
-Which will download all the ZINC15 druglike molecules. Then to get the 10M from ZINC15 we need to
-- Put all mols into one `.smi` file
-- Sample 10M molecules from the ZINC15 dataset.
-
-Then to work to process the 860M ZINC15 druglike molecules:
-`process_in_chunk.py` is utilized to make 860 1M molecules file to then process into a parquet file. This parquet file will
-interact with Dask in order to utilize the big data streaming for Round 3.
-
+To generate the parquet file for big data we need to move the `zinc15_all_raw.smi` to the directory with the script and run `process_in_chunk.py` to chunk and translate all the molecules into SELFIES. Next is to run the `dask_combine_fixed.py` to combine all the `.csv` chunk files into a parquet directory to work with our streaming global steps training regime. 
 
 ## Build the Docker image
 ```
