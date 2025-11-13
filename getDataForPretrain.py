@@ -232,14 +232,8 @@ if args.parallel:
 else:
     properties_series = df.apply(compute_properties, axis=1)
 
-
 # Convert the Series to a DataFrame
 properties_df = pd.DataFrame(properties_series.tolist())
-
-# --------------------------------------------------------------------------- #
-#  Merge everything together
-# --------------------------------------------------------------------------- #
-print(type(properties_df))
 
 properties_df.to_csv("./vocab_smiles_data_TEST_properties.csv", index=False)
 

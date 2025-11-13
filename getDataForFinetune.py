@@ -1,12 +1,8 @@
-# TODO: NEW Rename getDataForPretrain.py... the finetune doesn't get filtered down...
-# Add filter for criteria...
-
 import pymysql
 import pymysql.cursors
 from rdkit import Chem
 from rdkit.Chem import Draw, Descriptors
 
-# from rdkit.Chem import Descriptors
 import matplotlib.pyplot as plt
 import csv
 import yaml
@@ -17,7 +13,6 @@ from pandarallel import pandarallel
 from prepare_dataset import convert_to_selfies
 
 
-# TODO: NEW Make some arg parser stuffs...
 import argparse
 
 # make a parser for parallel processing
@@ -117,9 +112,7 @@ def compute_properties(row):
             "cLogP": cLogP,
             "numRings": numRings,
             "IC50": row["IC50"],
-            "site_name": row[
-                "site_name"
-            ],  # TODO: this is not needed for the pretrain data...
+            "site_name": row["site_name"],
         }
     else:
         return {
@@ -173,7 +166,6 @@ def draw_smiles(smiles_list):
 
 
 def save_smiles_to_csv(smiles_list, filename="smiles_finetune_data.csv"):
-    # TODO: This would need the key implemented in the filename...
     # Check if the list is not empty and get the keys from the first dictionary
     if smiles_list:
         headers = smiles_list[0].keys()
@@ -218,11 +210,6 @@ else:
 # Convert the Series to a DataFrame
 properties_df = pd.DataFrame(properties_series.tolist())
 
-
-# Print the DataFrame
-print(properties_df)
-print(type(properties_df))
-
 properties_df.to_csv("./data/smiles_finetune_data_properties.csv", index=False)
 
 # Load the initial DataFrame
@@ -235,10 +222,4 @@ non_filter["selfies"] = non_filter["canonical_smiles"].parallel_apply(
     convert_to_selfies
 )
 non_filter.drop(non_filter[non_filter.selfies.isnull()].index, inplace=True)
-print(non_filter.columns)  # DEBUG
-print(f"smiles_data.columns post-drop: {non_filter.columns}")
-non_filter.to_csv(
-    "./data/smiles_finetune_data_properties_selfies.csv", index=False
-)  # TODO: index=False, header=False for sure...
-
-# print(f"saving properties df to: ./data/smiles_finetune_data_properties.csv")
+non_filter.to_csv("./data/smiles_finetune_data_properties_selfies.csv", index=False)
