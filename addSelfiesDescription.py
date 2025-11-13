@@ -1,6 +1,5 @@
 import pandas as pd
 from pandarallel import pandarallel
-import selfies as sf
 import logging
 import argparse
 

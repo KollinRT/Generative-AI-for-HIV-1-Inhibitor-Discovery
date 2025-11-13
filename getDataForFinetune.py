@@ -10,6 +10,7 @@ from rdkit.Chem import Draw, Descriptors
 import matplotlib.pyplot as plt
 import csv
 import yaml
+import os
 import pandas as pd
 from pandarallel import pandarallel
 
@@ -226,8 +227,6 @@ properties_df.to_csv("./data/smiles_finetune_data_properties.csv", index=False)
 
 # Load the initial DataFrame
 non_filter = pd.read_csv("./data/smiles_finetune_data_properties.csv")
-
-import os
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
