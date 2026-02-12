@@ -1,35 +1,42 @@
+from typing import Optional
+
 import pandas as pd
 from pandarallel import pandarallel
 import selfies as sf
 import logging
 
+import os
+from tokenizers import models, pre_tokenizers, trainers
 
 from tokenizers import Tokenizer
-from tokenizers.models import BPE
-from tokenizers.pre_tokenizers import Split
-from tokenizers import Regex
 from tokenizers.processors import TemplateProcessing
-from tokenizers.trainers import BpeTrainer
-from os import mkdir
-
-
-# def convert_to_selfies(smiles_col):  # returns selfies representation of smiles string. if there is no representation return smiles unchanged.
-#     try:
-#         return sf.encoder(smiles_col)
-#     except sf.EncoderError:
-#         print("EncoderError in Conversion")
-#         return smiles_col
 
 # Setup basic configuration for logging
-logging.basicConfig(filename="conversion_errors.log", level=logging.INFO,
-                    format='%(asctime)s:%(levelname)s:%(message)s')
+logging.basicConfig(
+    filename="conversion_errors.log",
+    level=logging.INFO,
+    format="%(asctime)s:%(levelname)s:%(message)s",
+)
+
 
 def convert_to_selfies(smiles_string, index=None):
+    """
+    Args:
+        smiles_string: str
+            SMILES string to be converted to SELFIES
+        # index:
+
+    Returns:
+        selfies_string || None: str
+
+    """
     try:
         return sf.encoder(smiles_string)
     except sf.EncoderError:
-        logging.info(f"EncoderError in Conversion at index {index} for SMILES: {smiles_string}")
-        return None  # Return None or a specific flag to indicate conversion failure
+        logging.info(
+            f"EncoderError in Conversion at index {index} for SMILES: {smiles_string}"
+        )
+        return None
 
 
 # Inspired by https://github.com/HUBioDataLab/SELFormer/blob/main/prepare_pretraining_data.py
@@ -53,45 +60,92 @@ def convert_to_selfies(smiles_string, index=None):
 #     # Save to a .csv file
 #     smiles_data.to_csv(save_to, index=False)
 
-def prepare_dataset_for_pretrain(path="data/smiles.csv", save_to="data/selfies_ready.csv"):
+
+def prepare_dataset_for_pretrain(
+    # path="data/smiles.csv", save_to="data/selfies_ready.csv"
+    path: str = "data/smiles.csv",
+    save_to: str = "data/selfies_ready.csv",
+) -> Optional[str]:
+    """
+    Prepare a dataset for pretraining by loading SMILES strings,
+    converting them to SELFIES, cleaning the data, and saving the result.
+    Args:
+        path : str, optional (default="data/smiles.csv")
+            Path to the input CSV file containing SMILES strings.
+
+        save_to : str, optional (default="data/selfies_ready.csv")
+            Output path where the processed dataset will be saved.
+
+    Returns:
+        Optional[str]
+            The path to the saved dataset if processing is completed,
+            otherwise None.
+
+    """
     smiles_data = pd.read_csv(path)
-    print(f"smiles_data.columns: {smiles_data.columns}") # DEBUG
+    print(f"smiles_data.columns: {smiles_data.columns}")  # DEBUG
     # print(smiles_data.data.head())
     pandarallel.initialize()
-    smiles_data["selfies"] = smiles_data["canonical_smiles"].parallel_apply(convert_to_selfies)
+    smiles_data["selfies"] = smiles_data["canonical_smiles"].parallel_apply(
+        convert_to_selfies
+    )
     smiles_data.drop(smiles_data[smiles_data.selfies.isnull()].index, inplace=True)
-    print(smiles_data.columns) # DEBUG
-    smiles_data.drop(columns=["canonical_smiles"], inplace=True) # TODO: Drop all besides selfies...
+    print(smiles_data.columns)  # DEBUG
+    smiles_data.drop(
+        columns=["canonical_smiles"], inplace=True
+    )  # TODO: Drop all besides selfies...
     print(f"smiles_data.columns post-drop: {smiles_data.columns}")
-    smiles_data.to_csv(save_to, index=False) # TODO: index=False, header=False for sure...
+    smiles_data.to_csv(
+        save_to, index=False
+    )  # TODO: index=False, header=False for sure...
 
-def create_selfies_file(selfies_df, save_to="./data/selfies_subset.txt", subset_size=100000, do_subset=True):
 
+def create_selfies_file(
+    selfies_df, save_to="./data/selfies_subset.txt", subset_size=100000, do_subset=True
+):
+    """
+    Args:
+        selfies_df : pd.DataFrame
+            Pandas DataFrame containing a column of SELFIES strings.
+
+        save_to : str, optional (default="./data/selfies_subset.txt")
+            File path where the resulting SELFIES text file will be saved.
+
+        subset_size : int, optional (default=100000)
+            Number of rows to sample if subsetting is enabled.
+
+        do_subset : bool, optional (default=True)
+            If True, a random subset of `subset_size` rows will be taken.
+            If False, the entire DataFrame will be used.
+
+    Returns:
+
+    """
     selfies_df.sample(frac=1).reset_index(drop=True)  # shuffling
 
     if do_subset:
         selfies_subset = selfies_df.selfies[:subset_size]
     else:
         selfies_subset = selfies_df.selfies
-    selfies_subset = selfies_subset.to_frame() #
+    selfies_subset = selfies_subset.to_frame()  #
     selfies_subset["selfies"].to_csv(save_to, index=False, header=False)
     print("SELFIES_SUBSET here")
     print(selfies_subset)
-    # TODO: ABOVE this should be where the save happens... not in prepare. this will be done after
-    # prepare_dataset_for_pretrain is called.... iirc
 
 
+def get_selfies_alphabet(
+    read="data/selfies_ready.csv", path="data/selfies_alphabet.csv"
+):
+    """
+    Args:
+        read: str
+            Directory for reading SELFIES strings.
+        path: str
+            File/directory for writing the list of selfies_alphabet in.
+    Returns:
+        N/A
 
-
-# def get_selfies_alphabet(read="./data.csv", path="./data/selfies_alphabet.csv"):
-#     df = pd.read_csv(read)
-#     selfies_array = df.selfies.to_numpy(copy=True)
-#     selfies_alphabet = sf.get_alphabet_from_selfies(selfies_array)
-#
-#     with open(path, "w") as f:
-#         f.write(",".join(list(selfies_alphabet)))
-
-def get_selfies_alphabet(read="data/selfies_ready.csv", path="data/selfies_alphabet.csv"):
+    """
     df = pd.read_csv(read)
     selfies_array = df.selfies.to_numpy(copy=True)
     selfies_alphabet = sf.get_alphabet_from_selfies(selfies_array)
@@ -99,183 +153,17 @@ def get_selfies_alphabet(read="data/selfies_ready.csv", path="data/selfies_alpha
         f.write(",".join(list(selfies_alphabet)))
 
 
-# TODO: Not sure if needed
 def get_selfies_only(path, save_to):
+    """
+    Args:
+        path : str
+            Directory to read the SELFIES strings from.
+        save_to : str
+            Directory to save the SELFIES column only to.
+
+    Returns:
+
+    """
     df = pd.read_csv(path)
     selfies_column = df.selfies
     selfies_column.to_csv(save_to, index=False)
-
-
-# def bpe_tokenizer(path="./data/selfies_subset.txt", save_to="./data/bpe/"):
-#     """
-#     BPE tokenizer
-#     :param path: Path to get data from
-#     :param save_to: Path to save the folder of the tokenizer
-#     :return: N/A
-#     """
-# 	try:
-# 		mkdir(save_to)
-# 	except FileExistsError:
-# 		pass
-#
-# 	tokenizer = Tokenizer(BPE(unk_token="<unk>"))
-#
-# 	tokenizer.pre_tokenizer = Split(pattern=Regex("\[|\]"), behavior="removed")
-#
-# 	tokenizer.post_processor = TemplateProcessing(single="<s> $A </s>", pair="<s> $A </s> $B:1 </s>:1", special_tokens=[("<s>", 1), ("</s>", 2)],)
-#
-# 	trainer = BpeTrainer(special_tokens=["<unk>", "<s>", "</s>", "<pad>", "<mask>"])
-# 	tokenizer.train(files=[path], trainer=trainer)
-#
-# 	tokenizer.save(save_to + "/bpe.json", pretty=True)
-# 	tokenizer.model.save(save_to)
-from tokenizers import Tokenizer, models, pre_tokenizers, trainers, processors
-
-# TODO: Should be more improved to more comprehensively deals with SELFIES than the previous BPE tokenizer.
-# def bpe_tokenizer(path="./data/selfies_subset.txt", save_to="./data/bpe/"):
-#     """
-#     BPE tokenizer configured for SELFIES data and suitable for generative tasks using models like BART.
-#
-#     :param path: Path to get data from.
-#     :param save_to: Path to save the folder of the tokenizer.
-#     :return: None
-#     """
-#     # Ensure the directory exists
-#     try:
-#         mkdir(save_to)
-#     except FileExistsError:
-#         pass
-#
-#     # Create a tokenizer instance with BPE
-#     tokenizer = Tokenizer(models.BPE(unk_token="<unk>"))
-#
-#     # Setup a pre-tokenizer to correctly tokenize SELFIES without losing structural brackets
-#     # tokenizer.pre_tokenizer = pre_tokenizers.RegexSplit(pattern="(\\[[^\\[\\]]+\\])", behavior="isolated") # (\[[^\[\]]+\])
-#     # tokenizer.pre_tokenizer = Split(pattern=Regex("(\\[[^\\[\\]]+\\])"), behavior="isolated") # delimiter not removed; keep []
-#     tokenizer.pre_tokenizer = pre_tokenizers.Split(
-#         pattern=Regex(r"(\[[^\[\]]*\])|(\][^\[\]]*\[)|(\][^\[\]]*$)|(^[^\[\]]*\[)"),
-#         behavior="isolated"  # or "removed", depending on your requirements
-#     )
-#
-#     # Define a post-processor to add start and end tokens necessary for generative models
-#     # tokenizer.post_processor = processors.TemplateProcessing(
-#     #     single="<s> $A </s>",
-#     #     pair="<s> $A </s> $B:1 </s>:1",
-#     #     special_tokens=[
-#     #         ("<s>", tokenizer.token_to_id("<s>")),  # Ensure <s> token is recognized
-#     #         ("</s>", tokenizer.token_to_id("</s>"))  # Ensure </s> token is recognized
-#     #     ]
-#     # )
-#     tokenizer.post_processor = TemplateProcessing(single="<s> $A </s>", pair="<s> $A </s> $B:1 </s>:1", special_tokens=[("<s>", 1), ("</s>", 2)],)
-#
-#     # Configure the trainer with specific special tokens, including those needed for generative tasks
-#     trainer = trainers.BpeTrainer(special_tokens=["<unk>", "<s>", "</s>", "<pad>", "<mask>"])
-#
-#     # Train the tokenizer on the specified file
-#     tokenizer.train(files=[path], trainer=trainer)
-#
-#     # Save the tokenizer and model to the specified directory
-#     tokenizer.save(save_to + "/bpe.json", pretty=True)
-#     tokenizer.model.save(save_to)
-#
-
-#import os
-#def bpe_tokenizer(path="./data/selfies_subset.txt", save_to="./data/bpe/"):
-#    """
-#    BPE tokenizer configured for SELFIES data and suitable for generative tasks using models like BART.
-#
-#    :param path: Path to get data from.
-#    :param save_to: Path to save the folder of the tokenizer.
-#    :return: None
-#    """
-#    # Ensure the directory exists
-#    # try:
-#    #     mkdir(save_to)
-#    # except FileExistsError:
-#    #     pass
-#    os.makedirs(save_to, exist_ok=True)
-#
-#    # Create a tokenizer instance with BPE
-#    tokenizer = Tokenizer(models.BPE(unk_token="<unk>"))
-#
-#    tokenizer.pre_tokenizer = pre_tokenizers.Split(
-#        pattern=Regex(r"(\[[^\[\]]*\])|(\][^\[\]]*\[)|(\][^\[\]]*$)|(^[^\[\]]*\[)"),
-#        behavior="isolated"  # or "removed", depending on your requirements
-#    )
-#
-#    tokenizer.post_processor = TemplateProcessing(single="<s> $A </s>", pair="<s> $A </s> $B:1 </s>:1", special_tokens=[("<s>", 1), ("</s>", 2)],)
-#
-#    # Configure the trainer with specific special tokens, including those needed for generative tasks
-#    trainer = trainers.BpeTrainer(special_tokens=["<unk>", "<s>", "</s>", "<pad>", "<mask>"])
-#
-#    # Train the tokenizer on the specified file
-#    tokenizer.train(files=[path], trainer=trainer)
-#
-#    # Save the tokenizer and model to the specified directory
-#    tokenizer.save(save_to + "/bpe.json", pretty=True)
-#    tokenizer.model.save(save_to)
-#    # tokenizer.save_pretrained(save_to)
-
-# check with vocab
-
-import os
-import re
-
-from tokenizers import Tokenizer, models, trainers, pre_tokenizers
-from tokenizers.processors import TemplateProcessing
-
-def bpe_tokenizer(
-    path: str = "./data/selfies_subset.txt",
-    save_to: str = "./data/bpe/"
-) -> None:
-    """
-    BPE tokenizer configured for SELFIES strings,
-    isolating each [X] symbol as its own token and
-    ready for encoder–decoder models (e.g. BART).
-    """
-    # 1) make sure the output directory exists
-    os.makedirs(save_to, exist_ok=True)
-
-    # 2) initialize an “empty” BPE model
-    tokenizer = Tokenizer(models.BPE(unk_token="<unk>"))
-
-    # 3) pre-tokenizer: split out every “[...]” as its own piece
-    #    either of these two variants will work:
-
-    # Option A: pass a raw regex string
-    tokenizer.pre_tokenizer = pre_tokenizers.Split(
-        pattern=r"\[[^\]]+\]",
-        behavior="isolated",
-    )
-
-    # Option B: compile with Python’s `re` and pass that
-    # tokenizer.pre_tokenizer = pre_tokenizers.Split(
-    #     pattern=re.compile(r"\[[^\]]+\]"),
-    #     behavior="isolated",
-    # )
-
-    # 4) post-processor: wrap sequences in <s>…</s>, handle pairs
-    tokenizer.post_processor = TemplateProcessing(
-        single="<s> $A </s>",
-        pair="<s> $A </s> $B:1 </s>:1",
-        special_tokens=[("<s>", 1), ("</s>", 2)],
-    )
-
-    # 5) trainer: remind it about all the “special” tokens you’ll use
-    trainer = trainers.BpeTrainer(
-        special_tokens=["<unk>", "<s>", "</s>", "<pad>", "<mask>"]
-    )
-
-    # 6) train on your SELFIES file
-    tokenizer.train(files=[path], trainer=trainer)
-
-    # 7) save both the JSON “tokenizer” and the raw BPE model files
-    tokenizer.save(os.path.join(save_to, "bpe.json"), pretty=True)
-    tokenizer.model.save(save_to)
-
-    print(f"✅ BPE tokenizer written to {save_to!r}")
-
-# TODO: 05/19/2025 16:04 pm ADD WORD_LEVEL TOKENIZER LOGIC HERE!
-def word_level_tokenizer():
-    pass
-
